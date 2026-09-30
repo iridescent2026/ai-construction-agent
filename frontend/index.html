@@ -37,6 +37,34 @@
         .risk-mid { color: #f39c12; font-weight: bold; }
         .risk-low { color: #27ae60; font-weight: bold; }
 
+        .device-card {
+            background: #f8f9fa; border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 8px;
+            border-left: 4px solid #ccc;
+        }
+        .device-card.high { border-left-color: #e74c3c; }
+        .device-card.mid { border-left-color: #f39c12; }
+        .device-card.low { border-left-color: #27ae60; }
+        .device-card .device-title { font-weight: bold; font-size: 14px; }
+        .device-card .device-row { font-size: 13px; margin: 2px 0; }
+
+        #panel-tabs {
+            display: flex; gap: 0; margin-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        #panel-tabs .tab {
+            padding: 6px 14px; cursor: pointer;
+            font-size: 14px; color: #666;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+        #panel-tabs .tab.active {
+            color: #1a5276; border-bottom-color: #1a5276;
+            font-weight: bold;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
         #status-bar {
             position: absolute; top: 20px; left: 20px;
             z-index: 1000; background: rgba(15,35,65,0.9);
@@ -64,7 +92,16 @@
 
 <div id="panel">
     <h3>实时数据概览</h3>
-    <div id="zone-list">加载中...</div>
+    <div id="panel-tabs">
+        <div class="tab active" data-tab="zones">空间风险</div>
+        <div class="tab" data-tab="devices">电气设备</div>
+    </div>
+    <div id="tab-zones" class="tab-content active">
+        <div id="zone-list">加载中...</div>
+    </div>
+    <div id="tab-devices" class="tab-content">
+        <div id="device-list">加载中...</div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

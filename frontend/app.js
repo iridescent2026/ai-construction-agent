@@ -3,6 +3,7 @@
 // ============================================================
 
 const API_BASE = 'http://127.0.0.1:8000';
+const ELECTRICAL_API = 'http://127.0.0.1:8001';
 
 // 危险区域颜色映射
 const RISK_COLORS = {
@@ -232,7 +233,106 @@ setTimeout(() => {
 // ============================================================
 loadPeopleStatus();
 loadHeatmap();
+loadDevices();
+loadDeviceMap();
 setInterval(() => {
     loadPeopleStatus();
     loadHeatmap();
+    loadDevices();
 }, 30000);
+
+// ============================================================
+// 8. Tab 切换
+// ============================================================
+document.querySelectorAll('#panel-tabs .tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('#panel-tabs .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    });
+});
+
+// ============================================================
+// 9. 电气设备面板
+// ============================================================
+let deviceLayer = null;
+
+function loadDevices() {
+    fetch(`${ELECTRICAL_API}/devices`)
+        .then(res => res.json())
+        .then(data => {
+            const panel = document.getElementById('device-list');
+            if (!panel) return;
+            const riskClass = (level) => level === '高' ? 'high' : (level === '中' ? 'mid' : 'low');
+
+            panel.innerHTML = data.devices.map(d => {
+                const color = RISK_COLORS[d.risk_level] || '#999';
+                return `
+                    <div class="device-card ${riskClass(d.risk_level)}">
+                        <div class="device-title">${d.device_id} ${d.device_type}</div>
+                        <div class="device-row">负荷：${d.load}% | 温度：${d.temperature}℃ | 漏电：${d.leakage}mA</div>
+                        <div class="device-row">风险评分：<span class="risk-${riskClass(d.risk_level)}">${d.risk_score}</span>（${d.risk_level}）</div>
+                        <div class="device-row"><i>${d.alert}</i></div>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(err => {
+            console.error('电气数据加载失败:', err);
+            const panel = document.getElementById('device-list');
+            if (panel) panel.innerHTML = '<span style="color:#e74c3c;">电气后端未连接（请启动 8001 端口服务）</span>';
+        });
+}
+
+// ============================================================
+// 10. 地图配电箱图层
+// ============================================================
+function loadDeviceMap() {
+    fetch(`${ELECTRICAL_API}/devices.geojson`)
+        .then(res => res.json())
+        .then(data => {
+            if (deviceLayer) deviceLayer.remove();
+            deviceLayer = L.geoJSON(data, {
+                pointToLayer: (feature, latlng) => {
+                    const color = RISK_COLORS[feature.properties.risk_level] || '#999';
+                    return L.circleMarker(latlng, {
+                        radius: 7,
+                        color: '#fff',
+                        weight: 2,
+                        fillColor: color,
+                        fillOpacity: 0.9
+                    });
+                },
+                onEachFeature: (feature, layer) => {
+                    const p = feature.properties;
+                    const color = RISK_COLORS[p.risk_level] || '#999';
+                    layer.bindPopup(`
+                        <div style="min-width:160px;">
+                            <b style="font-size:14px;">${p.device_id} - ${p.device_type}</b><hr style="margin:4px 0;">
+                            <b>设备编号：</b>${p.device_id}<br>
+                            <b>设备类型：</b>${p.device_type}<br>
+                            <b>风险评分：</b><span style="color:${color};font-weight:bold;">${p.risk_score}</span><br>
+                            <b>风险等级：</b><span style="color:${color};">${p.risk_level}</span>
+                        </div>
+                    `);
+                    layer.bindTooltip(p.device_id, { permanent: false, direction: 'top', offset: [0, -10] });
+                }
+            }).addTo(map);
+
+            // 更新图层控制
+            setTimeout(() => {
+                if (zoneLayer && deviceLayer) {
+                    L.control.layers(null, {
+                        "危险区域": zoneLayer,
+                        "安全缓冲区": bufferLayer,
+                        "人员定位": personLayer,
+                        "电气设备": deviceLayer
+                    }, { collapsed: false, position: 'bottomleft' }).addTo(map);
+                }
+            }, 100);
+        })
+        .catch(err => {
+            console.error('电气设备地图加载失败:', err);
+        });
+}
