@@ -60,7 +60,7 @@
         "zone_type": "高空区",
         "risk_level": "高",
         "buffer_radius": 8,
-        "alert": "高空作业区，必须佩戴安全帽和安全绳"
+        "alert": "高空作业区，必须佩戴安全带和安全绳"
       }
     }
   ]

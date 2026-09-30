@@ -43,11 +43,11 @@ L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
 //    坐标使用完整版 GeoJSON 的坐标体系
 // ============================================================
 const people = [
-    { person_id: 'P001', lng: 120.0078, lat: 30.2946, name: '张三', role: '挖掘机操作员' },
-    { person_id: 'P002', lng: 120.0102, lat: 30.2936, name: '李四', role: '吊装指挥' },
-    { person_id: 'P003', lng: 120.0062, lat: 30.2952, name: '王五', role: '安全员' },
-    { person_id: 'P004', lng: 120.0082, lat: 30.2910, name: '赵六', role: '电工' },
-    { person_id: 'P005', lng: 120.0055, lat: 30.2958, name: '孙七', role: '项目经理' }
+    { person_id: 'P001', lng: 120.008, lat: 30.2945, name: '张三', role: '挖掘机操作员' },
+    { person_id: 'P002', lng: 120.0100, lat: 30.2935, name: '李四', role: '吊装指挥' },
+    { person_id: 'P003', lng: 120.011, lat: 30.292, name: '王五', role: '安全员' },
+    { person_id: 'P004', lng: 120.008, lat: 30.2910, name: '赵六', role: '电工' },
+    { person_id: 'P005', lng: 120.006, lat: 30.293, name: '孙七', role: '项目经理' }
 ];
 
 // ============================================================
