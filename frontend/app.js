@@ -157,20 +157,7 @@ function loadPeopleStatus() {
                     ${r.distance_to_boundary ? `<b>距边界：</b>${r.distance_to_boundary}度<br>` : ''}
                     <b>预警：</b>${r.alert}
                 </div>
-            `);
-
-            // 在人员点旁加标签
-            L.tooltip({
-                permanent: false,
-                direction: 'top',
-                offset: [0, -12]
-            }).setContent(r.person_id).addTo(personLayer);
-
-            personLayer.eachLayer(l => {
-                if (l.getLatLng && l.getLatLng().lat === person.lat) {
-                    l.bindTooltip(r.person_id, { permanent: false, direction: 'top', offset: [0, -12] });
-                }
-            });
+            `).bindTooltip(r.person_id, { permanent: false, direction: 'top', offset: [0, -12] });
         });
 
         personLayer.addTo(map);
@@ -180,9 +167,12 @@ function loadPeopleStatus() {
         document.getElementById('api-status-text').textContent = '后端已连接';
     })
     .catch(err => {
-        console.error('后端连接失败:', err);
-        document.getElementById('api-status-dot').className = 'dot dot-red';
-        document.getElementById('api-status-text').textContent = '后端未连接（请启动 FastAPI）';
+        console.error('人员状态加载失败:', err);
+        const isNetworkError = err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
+        if (isNetworkError) {
+            document.getElementById('api-status-dot').className = 'dot dot-red';
+            document.getElementById('api-status-text').textContent = '后端未连接（请启动 FastAPI）';
+        }
         // 即使后端没连上，也显示人员点（灰色）
         if (personLayer) personLayer.remove();
         personLayer = L.layerGroup();
