@@ -25,28 +25,45 @@ def load_zones_from_geojson(filepath):
 
 
 # ============================================================
-# 2. 核心函数：判断人员是否在危险区
+# 2. 核心函数：判断人员是否在危险区（含缓冲区）
 # ============================================================
-def check_person_in_danger(person_id, lng, lat, zones):
-    """使用 GeoJSON 加载的区域判断"""
+def check_person_in_danger(person_id, lng, lat, zones, buffer_distance=0.0001):
+    """使用 GeoJSON 加载的区域判断，支持缓冲区预警"""
     point = Point(lng, lat)
 
     for zone in zones:
         polygon = zone["geometry"]
 
+        # 在危险区内
         if polygon.contains(point):
             return {
                 "person_id": person_id,
                 "inside_zone": True,
+                "in_buffer": False,
                 "zone_id": zone["zone_id"],
                 "zone_type": zone["zone_type"],
                 "risk_level": zone["risk_level"],
                 "alert": f"人员{person_id}进入{zone['zone_type']}危险区（{zone['risk_level']}风险）"
             }
 
+        # 在缓冲区边缘
+        distance = point.distance(polygon)
+        if distance < buffer_distance:
+            return {
+                "person_id": person_id,
+                "inside_zone": False,
+                "in_buffer": True,
+                "zone_id": zone["zone_id"],
+                "zone_type": zone["zone_type"],
+                "risk_level": zone["risk_level"],
+                "distance_to_boundary": round(distance, 6),
+                "alert": f"人员{person_id}靠近{zone['zone_type']}危险区，请注意"
+            }
+
     return {
         "person_id": person_id,
         "inside_zone": False,
+        "in_buffer": False,
         "zone_id": None,
         "zone_type": None,
         "risk_level": "低",
