@@ -104,6 +104,16 @@
     </div>
 </div>
 
+<!-- 智能体对话框 -->
+<div id="chat-panel" style="position: absolute; bottom: 20px; left: 20px; width: 420px; background: white; border-radius: 8px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 1000;">
+    <h3 style="margin-top: 0;">智能体助手</h3>
+    <div id="chat-history" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px; font-size: 13px;"></div>
+    <div style="display: flex; gap: 8px;">
+        <input id="chat-input" placeholder="问点什么... 例如：今天哪个区域风险最高？" style="flex: 1; padding: 6px; font-size: 13px;" />
+        <button onclick="sendMessage()" style="padding: 6px 12px; font-size: 13px;">发送</button>
+    </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
 </body>

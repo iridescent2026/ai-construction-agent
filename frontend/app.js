@@ -336,3 +336,58 @@ function loadDeviceMap() {
             console.error('电气设备地图加载失败:', err);
         });
 }
+
+// ============================================================
+// 11. 智能体对话框
+// ============================================================
+const MATH_API = 'http://127.0.0.1:8002';
+
+async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const query = input.value.trim();
+    if (!query) return;
+
+    addChatMessage('user', query);
+    input.value = '';
+
+    try {
+        const res = await fetch(`${MATH_API}/chat?query=${encodeURIComponent(query)}`, {
+            method: 'POST'
+        });
+        const data = await res.json();
+
+        if (data.tool_calls && data.tool_calls.length > 0) {
+            addChatMessage('tool', `调用：${data.tool_calls.join(', ')}`);
+        }
+
+        addChatMessage('bot', data.answer);
+    } catch (err) {
+        addChatMessage('bot', '智能体暂时无法响应，请检查 8002 端口。');
+    }
+}
+
+function addChatMessage(role, text) {
+    const history = document.getElementById('chat-history');
+    if (!history) return;
+    const div = document.createElement('div');
+    div.style.margin = '5px 0';
+    div.style.padding = '5px 8px';
+    div.style.borderRadius = '4px';
+    div.style.background = role === 'user' ? '#e3f2fd'
+                        : role === 'tool' ? '#fff3e0'
+                        : '#f1f8e9';
+    div.style.fontSize = '13px';
+    const label = role === 'user' ? '你' : role === 'tool' ? '工具' : '智能体';
+    div.innerHTML = `<b>${label}：</b>${text}`;
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('chat-input');
+    if (input) {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    }
+});
