@@ -1,0 +1,45 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_id": "Z001",
+        "zone_type": "基坑",
+        "risk_level": "高"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [120.1230, 30.4560],
+            [120.1240, 30.4560],
+            [120.1240, 30.4570],
+            [120.1230, 30.4570],
+            [120.1230, 30.4560]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_id": "Z002",
+        "zone_type": "吊装区",
+        "risk_level": "中"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [120.1250, 30.4560],
+            [120.1260, 30.4560],
+            [120.1260, 30.4570],
+            [120.1250, 30.4570],
+            [120.1250, 30.4560]
+          ]
+        ]
+      }
+    }
+  ]
+}
