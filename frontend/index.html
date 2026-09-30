@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工安智瞳 - 施工现场安全智能体</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+        #map { width: 100vw; height: 100vh; z-index: 1; }
+
+        #panel {
+            position: absolute; top: 20px; right: 20px;
+            width: 320px; max-height: 80vh; overflow-y: auto;
+            background: rgba(255,255,255,0.95);
+            padding: 18px 20px; border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+        #panel h3 {
+            font-size: 16px; color: #1a2332;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 8px; margin-bottom: 10px;
+        }
+        .zone-card {
+            background: #f8f9fa; border-radius: 8px;
+            padding: 10px 12px; margin-bottom: 8px;
+            border-left: 4px solid #ccc;
+        }
+        .zone-card.high { border-left-color: #e74c3c; }
+        .zone-card.mid { border-left-color: #f39c12; }
+        .zone-card.low { border-left-color: #27ae60; }
+        .zone-card .zone-title { font-weight: bold; font-size: 14px; }
+        .zone-card .zone-row { font-size: 13px; margin: 2px 0; }
+        .risk-high { color: #e74c3c; font-weight: bold; }
+        .risk-mid { color: #f39c12; font-weight: bold; }
+        .risk-low { color: #27ae60; font-weight: bold; }
+
+        #status-bar {
+            position: absolute; top: 20px; left: 20px;
+            z-index: 1000; background: rgba(15,35,65,0.9);
+            color: #fff; padding: 10px 20px; border-radius: 8px;
+            font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        #status-bar .dot {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; margin-right: 6px;
+        }
+        .dot-green { background: #27ae60; }
+        .dot-red { background: #e74c3c; }
+
+        .leaflet-popup-content { font-size: 13px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="status-bar">
+    <span class="dot dot-green" id="api-status-dot"></span>
+    <span id="api-status-text">正在连接后端...</span>
+</div>
+
+<div id="panel">
+    <h3>实时数据概览</h3>
+    <div id="zone-list">加载中...</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

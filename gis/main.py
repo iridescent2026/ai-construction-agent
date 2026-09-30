@@ -30,13 +30,13 @@ def load_zones_from_geojson(filepath):
 
 zones = load_zones_from_geojson(os.path.join(BASE_DIR, "danger_zones.geojson"))
 
-# 模拟人员数据（后续可对接实时定位）
+# 模拟人员数据（与前端 app.js 对齐，坐标体系 120.007°E 30.293°N）
 all_people = [
-    {"person_id": "P001", "lng": 120.1235, "lat": 30.4565},
-    {"person_id": "P002", "lng": 120.1255, "lat": 30.4565},
-    {"person_id": "P003", "lng": 120.1300, "lat": 30.4600},
-    {"person_id": "P004", "lng": 120.1240, "lat": 30.4568},
-    {"person_id": "P005", "lng": 120.1260, "lat": 30.4572},
+    {"person_id": "P001", "lng": 120.0078, "lat": 30.2946},
+    {"person_id": "P002", "lng": 120.0102, "lat": 30.2936},
+    {"person_id": "P003", "lng": 120.0062, "lat": 30.2952},
+    {"person_id": "P004", "lng": 120.0082, "lat": 30.2910},
+    {"person_id": "P005", "lng": 120.0055, "lat": 30.2958},
 ]
 
 
