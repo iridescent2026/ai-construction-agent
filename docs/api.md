@@ -191,25 +191,49 @@
 
 ## 四、数学接口（数学负责 · 待补充）
 
-### 接口6：`POST /risk` — 综合风险查询
+### 接口6：`GET /risk` — 综合风险查询
 
-**请求：**
-```json
-{
-  "query": "今天哪个区域风险最高？"
-}
+**功能：** 融合 GIS 空间风险与电气风险，返回综合风险等级与处置建议。
+
+**融合规则：** 分别取两个维度的最高风险，再取两者中**最危险者**作为综合风险：
+
 ```
+overall_risk = max( max(GIS各区风险), max(电气各设备风险) )
+```
+
+> GIS 与电气是两个**独立危险源**，任一超标即构成危险，
+> 因此不对任一维度施加折减系数，也不做加权平均
+> （加权会把"有人闯入基坑"这类高危信号稀释掉，导致漏报）。
+
+**请求：** 无
 
 **返回：**
 ```json
 {
-  "overall_risk": 0.82,
-  "high_risk_zones": ["Z001"],
-  "high_risk_devices": ["D003"],
-  "prediction": "未来2小时基坑区风险上升",
-  "suggestion": "立即疏散人员，检查2号配电箱"
+  "overall_risk": 0.92,
+  "gis_max": 0.85,
+  "elec_max": 0.92,
+  "gis_risk": [
+    {"zone_id": "Z001", "zone_type": "基坑", "risk_level": "高", "people_count": 1, "risk_score": 0.85}
+  ],
+  "elec_risk": [
+    {"device_id": "D002", "device_type": "配电箱", "load": 88, "temperature": 68,
+     "leakage": 0.5, "risk_score": 0.92, "risk_level": "高", "alert": "严重：过载、高温、漏电"}
+  ],
+  "suggestion": "立即检查高风险电气设备，必要时断电处理"
 }
 ```
+
+**字段说明：**
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| overall_risk | number | 综合风险评分 0-1（取两维度最危险者） |
+| gis_max | number | GIS 维度的最高风险分 |
+| elec_max | number | 电气维度的最高风险分 |
+| gis_risk | array | 各危险区域的风险明细 |
+| elec_risk | array | 各电气设备的风险明细 |
+| suggestion | string | 处置建议（依触发维度给出） |
 
 ---
 

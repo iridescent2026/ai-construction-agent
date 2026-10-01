@@ -27,22 +27,29 @@ async def get_risk():
 
     # 空间风险取最高
     gis_max = max(z["risk_score"] for z in gis_data) if gis_data else 0
-    # 电气风险取最高（乘 0.8 权重）
-    elec_max = max(d["risk_score"] for d in elec_data) * 0.8 if elec_data else 0
+    # 电气风险取最高
+    # 注意：GIS 与电气是两个独立危险源，任一超标即构成危险，
+    # 因此这里不施加任何折减系数，与 gis_max 同等对待
+    elec_max = max(d["risk_score"] for d in elec_data) if elec_data else 0
 
-    # 综合评分
+    # 综合评分：取两个维度中最危险者
     overall = round(max(gis_max, elec_max), 2)
 
-    # 建议
+    # 建议：区分是哪个维度触发，避免提示与原因不匹配
     if overall >= 0.7:
-        suggestion = "立即疏散高风险区域人员，检查高风险设备"
+        if elec_max >= gis_max:
+            suggestion = "立即检查高风险电气设备，必要时断电处理"
+        else:
+            suggestion = "立即疏散高风险区域人员"
     elif overall >= 0.3:
-        suggestion = "加强巡检，关注高风险区域"
+        suggestion = "加强巡检，关注高风险区域与设备"
     else:
         suggestion = "保持正常监测"
 
     return {
         "overall_risk": overall,
+        "gis_max": gis_max,
+        "elec_max": elec_max,
         "gis_risk": gis_data,
         "elec_risk": elec_data,
         "suggestion": suggestion
