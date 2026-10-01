@@ -5,7 +5,7 @@ from typing import List
 import random
 from datetime import datetime
 
-app = FastAPI()
+app = FastAPI(title="电气风险接口", description="工地安全监测系统 - 电气模块（lry负责）")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,52 +18,92 @@ app.add_middleware(
 
 # ============================================================
 # 模拟电气设备数据
+# 坐标与指标值与 工地布局图/electrical_boxes.geojson 保持一致
 # ============================================================
 devices = [
     {
         "device_id": "D001",
         "device_type": "配电箱",
-        "location": [120.007, 30.293],
-        "load": 35,
+        "location": [120.0070, 30.2948],
+        "load": 72,
         "temperature": 45,
         "leakage": 0.1
     },
     {
         "device_id": "D002",
         "device_type": "配电箱",
-        "location": [120.008, 30.294],
-        "load": 85,
-        "temperature": 62,
-        "leakage": 0.3
+        "location": [120.0098, 30.2937],
+        "load": 88,
+        "temperature": 68,
+        "leakage": 0.5
     },
     {
         "device_id": "D003",
         "device_type": "开关柜",
-        "location": [120.009, 30.293],
-        "load": 45,
-        "temperature": 50,
+        "location": [120.0078, 30.2912],
+        "load": 65,
+        "temperature": 52,
         "leakage": 0.2
     },
     {
         "device_id": "D004",
         "device_type": "配电箱",
-        "location": [120.007, 30.292],
-        "load": 15,
-        "temperature": 40,
-        "leakage": 0.1
+        "location": [120.0060, 30.2955],
+        "load": 50,
+        "temperature": 38,
+        "leakage": 0.05
     }
 ]
 
 
 # ============================================================
-# 风险评分模型
+# 风险评分模型（阈值线性映射 + 加权融合）
+#
+# 与「物理量直接除以满量程」的做法相比，本模型引入安全阈值概念：
+# 低于安全阈值不产生风险，高于危险阈值记满分，中间线性插值。
+# 这更符合现场临时用电的评判逻辑——负荷 60% 属正常工作状态，
+# 不应与负荷 0% 一样被计入风险。
+#
+#   risk_score = 0.45 × 漏电超标度
+#              + 0.35 × 负荷超标度
+#              + 0.20 × 温度超标度
+#
+# 权重依据：
+#   漏电 0.45 —— 直接导致触电伤亡，是临时用电最致命的风险
+#   负荷 0.35 —— 过载会引发电缆发热甚至起火
+#   温度 0.20 —— 温度多为过载/漏电的结果性指标，非独立成因
 # ============================================================
+
+# 各指标的安全阈值 / 危险阈值
+LOAD_SAFE, LOAD_DANGER = 60.0, 95.0         # 负荷百分比 %，60% 为轻载上限，95% 接近满载
+TEMP_SAFE, TEMP_DANGER = 40.0, 70.0         # 箱体温度 ℃，40℃ 为常温上限，70℃ 为危险上限
+LEAK_SAFE, LEAK_DANGER = 0.1, 0.5           # 漏电电流 mA，0.1mA 为安全上限，0.5mA 为危险上限
+
+# 三项指标权重（合计 1.0）
+W_LEAK, W_LOAD, W_TEMP = 0.45, 0.35, 0.20
+
+# 预警触发阈值（与评分阈值分开设置，避免边界值频繁误报）
+LOAD_ALERT = 80.0                           # 负荷超过 80% 提示过载
+TEMP_ALERT = 55.0                           # 温度超过 55℃ 提示高温
+LEAK_ALERT = 0.3                            # 漏电超过 0.3mA 提示漏电
+
+
+def _risk_ratio(value, safe, danger):
+    """把物理量线性映射为 0-1 的超标程度"""
+    if value <= safe:
+        return 0.0
+    if value >= danger:
+        return 1.0
+    return (value - safe) / (danger - safe)
+
+
 def calc_risk_score(load, temperature, leakage):
     """计算电气风险评分 0-1"""
-    risk = 0
-    risk += min(load / 100, 1.0) * 0.4
-    risk += min(temperature / 80, 1.0) * 0.3
-    risk += min(leakage / 0.5, 1.0) * 0.3
+    r_load = _risk_ratio(load, LOAD_SAFE, LOAD_DANGER)
+    r_temp = _risk_ratio(temperature, TEMP_SAFE, TEMP_DANGER)
+    r_leak = _risk_ratio(leakage, LEAK_SAFE, LEAK_DANGER)
+
+    risk = W_LEAK * r_leak + W_LOAD * r_load + W_TEMP * r_temp
     return round(min(risk, 1.0), 2)
 
 
@@ -79,15 +119,21 @@ def get_risk_level(score):
 def get_alert(load, temperature, leakage, score):
     """生成预警文字"""
     alerts = []
-    if load > 80:
+    if load >= LOAD_ALERT:
         alerts.append("过载")
-    if temperature > 60:
+    if temperature >= TEMP_ALERT:
         alerts.append("高温")
-    if leakage > 0.3:
+    if leakage >= LEAK_ALERT:
         alerts.append("漏电")
     if not alerts:
         return "正常"
-    return "、".join(alerts)
+    if score >= 0.7:
+        level = "严重"
+    elif score >= 0.3:
+        level = "警告"
+    else:
+        level = "关注"
+    return f"{level}：" + "、".join(alerts)
 
 
 # ============================================================
