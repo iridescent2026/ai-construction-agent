@@ -123,8 +123,8 @@ def optimize_route(req: RouteRequest):
         node = manager.IndexToNode(index)
         route.append(points[node].id)
         index = solution.Value(routing.NextVar(index))
-        if not routing.IsEnd(index):
-            total_dist += dist_matrix[node][manager.IndexToNode(index)]
+        # 终点索引也对应起点，最后一段回程同样计入总距离。
+        total_dist += dist_matrix[node][manager.IndexToNode(index)]
     route.append(points[start_idx].id)
 
     return {
