@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -21,38 +21,14 @@ app.add_middleware(
 # 坐标与指标值与 工地布局图/electrical_boxes.geojson 保持一致
 # ============================================================
 devices = [
-    {
-        "device_id": "D001",
-        "device_type": "配电箱",
-        "location": [120.0070, 30.2948],
-        "load": 72,
-        "temperature": 45,
-        "leakage": 0.1
-    },
-    {
-        "device_id": "D002",
-        "device_type": "配电箱",
-        "location": [120.0098, 30.2937],
-        "load": 88,
-        "temperature": 68,
-        "leakage": 0.5
-    },
-    {
-        "device_id": "D003",
-        "device_type": "开关柜",
-        "location": [120.0078, 30.2912],
-        "load": 65,
-        "temperature": 52,
-        "leakage": 0.2
-    },
-    {
-        "device_id": "D004",
-        "device_type": "配电箱",
-        "location": [120.0060, 30.2955],
-        "load": 50,
-        "temperature": 38,
-        "leakage": 0.05
-    }
+    {"device_id": "D001", "device_type": "配电箱", "location": [120.1170, 30.2800], "load": 35, "temperature": 45, "leakage": 0.1, "model": "XL-100", "install_date": "2025-06-15", "last_check": "2026-09-01"},
+    {"device_id": "D002", "device_type": "配电箱", "location": [120.1180, 30.2798], "load": 85, "temperature": 62, "leakage": 0.3, "model": "XL-200", "install_date": "2025-06-15", "last_check": "2026-08-15"},
+    {"device_id": "D003", "device_type": "开关柜", "location": [120.1190, 30.2802], "load": 45, "temperature": 50, "leakage": 0.2, "model": "KG-50", "install_date": "2025-06-20", "last_check": "2026-09-10"},
+    {"device_id": "D004", "device_type": "配电箱", "location": [120.1165, 30.2805], "load": 15, "temperature": 40, "leakage": 0.1, "model": "XL-100", "install_date": "2025-06-15", "last_check": "2026-09-05"},
+    {"device_id": "D005", "device_type": "电缆", "location": [120.1185, 30.2810], "load": 60, "temperature": 55, "leakage": 0.25, "model": "DL-3x50", "install_date": "2025-06-25", "last_check": "2026-09-08"},
+    {"device_id": "D006", "device_type": "配电箱", "location": [120.1195, 30.2795], "load": 72, "temperature": 58, "leakage": 0.28, "model": "XL-150", "install_date": "2025-07-01", "last_check": "2026-08-20"},
+    {"device_id": "D007", "device_type": "开关柜", "location": [120.1175, 30.2812], "load": 30, "temperature": 42, "leakage": 0.15, "model": "KG-30", "install_date": "2025-06-20", "last_check": "2026-09-12"},
+    {"device_id": "D008", "device_type": "电缆", "location": [120.1182, 30.2808], "load": 55, "temperature": 52, "leakage": 0.22, "model": "DL-3x35", "install_date": "2025-06-25", "last_check": "2026-09-03"}
 ]
 
 
@@ -241,7 +217,13 @@ def devices_geojson():
                 "device_id": d["device_id"],
                 "device_type": d["device_type"],
                 "risk_score": score,
-                "risk_level": get_risk_level(score)
+                "risk_level": get_risk_level(score),
+                "load": d["load"],
+                "temperature": d["temperature"],
+                "leakage": d["leakage"],
+                "model": d.get("model", ""),
+                "install_date": d.get("install_date", ""),
+                "last_check": d.get("last_check", "")
             }
         })
     return {"type": "FeatureCollection", "features": features}
