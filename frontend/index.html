@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工安智瞳 · 工地安全工作台</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css"><link rel="stylesheet" href="styles.css?v=3">
+<link rel="stylesheet" href="industrial.css?v=3">
+<link rel="stylesheet" href="steel.css?v=4"><link rel="stylesheet" href="heavy-steel.css?v=5"><script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
+</head>
+<body>
+<header class="topbar"><div class="brand"><div class="brand-mark"><span>工</span></div><div><h1>工安智瞳</h1><p>CONSTRUCTION SAFETY · 安全工作台</p></div></div><div class="top-actions"><span class="demo-badge">杭州 · 演示工地 A</span><button id="refresh" type="button">刷新数据</button><button id="simulate" class="primary" type="button">更新演示观测</button></div></header>
+<div id="notice" class="notice" role="status" hidden></div>
+<main class="workspace">
+<section class="main" aria-label="工地可视化">
+<div class="metrics">
+<div class="metric"><span>危险区域</span><strong id="metric-zones">—</strong><small>已配置的作业范围</small></div>
+<div class="metric"><span>当前有效人员</span><strong id="metric-people">—</strong><small id="people-note">核验观测时间中</small></div>
+<div class="metric"><span>高风险设备</span><strong id="metric-high">—</strong><small>单项硬告警优先</small></div>
+<div class="metric"><span>未知状态</span><strong id="metric-unknown">—</strong><small>过期位置 + 未知设备</small></div>
+</div>
+<div class="stage-card">
+<div class="stage-toolbar"><h2>工地空间视图</h2><div class="view-switch" role="group" aria-label="显示模式"><button id="view-2d" type="button" aria-pressed="true" class="active">二维平面</button><button id="view-3d" type="button" aria-pressed="false">3D 场景</button><button id="reset-view" type="button">回到全景</button><button id="basemap" type="button" aria-pressed="false">卫星底图</button></div></div>
+<div class="stage-body">
+<div id="map" class="view" aria-label="二维工地地图"></div><div id="scene3d" class="view" aria-label="可旋转工地三维场景" hidden></div>
+<div id="view-note" class="view-note">圆点为人员，方块为设备；点击对象可查看详情。</div>
+<div id="scene-detail" class="scene-detail" aria-live="polite" hidden><button id="close-detail" type="button" aria-label="关闭详情">×</button><div id="detail-content"></div></div>
+<span class="compass" id="compass">↑ 北</span>
+</div>
+<div class="status-line"><b id="gis-status">空间服务：连接中</b><b id="device-status">电气服务：连接中</b><b id="snapshot-label"></b></div>
+</div>
+<p class="view-help" id="view-help">平面坐标按工地位置展示。卫星影像需要联网，关闭底图仍可查看全部业务图层。</p>
+</section>
+<aside class="sidebar">
+<section class="legend" aria-label="地图图例"><h2>图例 · 颜色与符号</h2><div class="legend-grid">
+<span class="legend-item"><i class="swatch high"></i>高风险</span><span class="legend-item"><i class="swatch medium"></i>中风险 / 需关注</span><span class="legend-item"><i class="swatch low"></i>低风险</span><span class="legend-item"><i class="swatch unknown"></i>过期 / 未知</span>
+<span class="legend-item"><i class="symbol person"></i>人员 / 人形</span><span class="legend-item"><i class="symbol device"></i>设备 / 箱体</span><span class="legend-item"><i class="symbol zone"></i>危险区域</span><span class="legend-item"><i class="symbol buffer"></i>安全缓冲区</span><span class="legend-item"><i class="symbol route"></i>巡检顺序</span>
+</div><p>灰色不能理解为安全。3D 高度及模型为演示示意，不代表实测建筑或 BIM。</p><details class="layer-options"><summary>图层显示（二维 / 3D 同步）</summary><div class="legend-grid"><label><input type="checkbox" data-layer="zones" checked>显示区域</label><label><input type="checkbox" data-layer="buffers" checked>显示缓冲区</label><label><input type="checkbox" data-layer="people" checked>显示人员</label><label><input type="checkbox" data-layer="devices" checked>显示设备</label><label><input type="checkbox" data-layer="route" checked>显示巡检线</label></div></details></section>
+<section class="sensor-panel" aria-label="定位联动演示"><h2>现场感知接入 <span class="sensor-badge">SIMULATION</span></h2><div class="sensor-controls"><select id="motion-mode" aria-label="模拟来源"><option value="phone">手机定位模拟</option><option value="camera">摄像头识别模拟</option></select><button id="motion-start">开始演示</button><button id="motion-stop" disabled>停止</button></div><canvas id="camera-preview" width="640" height="250" aria-label="模拟摄像头画面，非真实识别" hidden></canvas><p id="motion-status" role="status">未启动 · 合成轨迹通过接口上报，驱动地图人员移动。</p><p>非真实 GPS / 视频；场景建筑为设计示意。真实位置可接入上报接口。</p></section>
+<section class="panel">
+<div id="panel-tabs" class="tabs" role="tablist" aria-label="业务面板"><button id="tab-button-zones" class="tab active" role="tab" aria-selected="true" aria-controls="tab-zones" data-tab="zones">区域</button><button id="tab-button-devices" class="tab" role="tab" aria-selected="false" aria-controls="tab-devices" data-tab="devices">设备</button><button id="tab-button-assistant" class="tab" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant">助手</button></div>
+<div id="tab-zones" class="tab-content active" role="tabpanel" aria-labelledby="tab-button-zones"><p class="hint">人数只统计 120 秒内的有效位置。过期记录保留在图上并标灰。</p><div id="zone-list" class="empty">正在读取区域…</div></div>
+<div id="tab-devices" class="tab-content" role="tabpanel" aria-labelledby="tab-button-devices"><label for="device-filter">筛选设备</label><select id="device-filter"><option value="all">全部设备</option><option value="高">高风险</option><option value="中">中风险 / 需关注</option><option value="未知">过期 / 未知</option></select><p class="hint">点击“定位”可在二维与 3D 场景中定位同一设备。</p><div id="device-list">读取中…</div></div>
+<div id="tab-assistant" class="tab-content" role="tabpanel" aria-labelledby="tab-button-assistant"><div class="quick-actions"><button type="button" data-query="电气设备状态怎么样？">设备状态</button><button type="button" data-query="当前风险怎么样？">风险概览</button><button type="button" data-query="规划巡检路线">巡检顺序</button></div><form id="ask-form"><label for="route-start">巡检起点（覆盖全部设备）</label><select id="route-start"></select><label for="query">查询内容</label><input id="query" maxlength="1000" required value="电气设备状态怎么样？"><button id="ask-button" class="primary" type="submit" style="margin-top:10px">查询</button></form><p class="hint">巡检连线仅表示点间顺序，尚未校验围挡、道路与禁行区。</p><div id="answer" role="status" aria-live="polite"></div></div>
+</section></aside></main>
+<script src="vendor/leaflet/leaflet.js"></script><script src="config.js"></script><script src="ui-core.js"></script><script src="app.js?v=5"></script><script src="motion.js"></script><script src="shell.js?v=5"></script>
+<script src="management.js?v=5"></script></body></html>
