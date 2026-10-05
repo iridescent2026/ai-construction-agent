@@ -1,0 +1,10 @@
+# Direct runtime dependencies verified with Python 3.14.5 on Windows.
+fastapi==0.142.2
+uvicorn==0.54.0
+websockets==17.2
+pydantic==2.13.5
+shapely==2.1.2
+pyproj==3.8.0
+httpx==0.28.1
+openai==3.24.0
+ortools==9.15.6755

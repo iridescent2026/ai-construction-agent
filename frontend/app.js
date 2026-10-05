@@ -1,338 +1,161 @@
-// ============================================================
-// 工安智瞳 - 前端地图应用
-// ============================================================
+const API_BASE=window.APP_CONFIG?.gis || 'http://127.0.0.1:8000';
+const ELECTRICAL_API=window.APP_CONFIG?.electrical || 'http://127.0.0.1:8001';
+const AGENT_API=window.APP_CONFIG?.agent || 'http://127.0.0.1:8002';
+const {colors,escape:escapeHtml,deviceState,personState}=window.SiteUI;
+const $=id=>document.getElementById(id);
+const state={zones:null,buffers:null,spatial:null,devices:null,snapshot:null,route:[],mode:'2d',visibility:{zones:true,buffers:true,people:true,devices:true,route:true}};
+let scene=null,sceneLoading=null,deviceBusy=false,spatialBusy=false,simulationBusy=false,lastFreshness='';
+const map=L.map('map',{zoomControl:true,minZoom:12,maxZoom:21}).setView([30.293,120.008],17);
+const base=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri World Imagery'});
+const zoneLayer=L.geoJSON(null,{style:f=>({color:colors[f.properties.risk_level],weight:2,fillOpacity:0.18}),
+    onEachFeature:(f,layer)=>layer.bindPopup(`<b>${escapeHtml(f.properties.zone_id)} ${escapeHtml(f.properties.zone_type)}</b><br>缓冲距离 ${f.properties.buffer_radius} 米`)}).addTo(map);
+const bufferLayer=L.geoJSON(null,{style:()=>({color:'#61778e',weight:1,dashArray:'5 4',fillOpacity:0.035})}).addTo(map);
+const personLayer=L.layerGroup().addTo(map),deviceLayer=L.layerGroup().addTo(map),routeLayer=L.layerGroup().addTo(map);
+const layers={zones:zoneLayer,buffers:bufferLayer,people:personLayer,devices:deviceLayer,route:routeLayer};
+document.querySelectorAll('[data-layer]').forEach(input=>input.addEventListener('change',()=>{
+    const key=input.dataset.layer;state.visibility[key]=input.checked;
+    input.checked?layers[key].addTo(map):map.removeLayer(layers[key]);syncScene();
+}));
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
+let satellite=false;
+base.on('tileerror',()=>notice('卫星影像暂时不可用；示意图、业务图层及 3D 场景不受影响。'));
 
-const API_BASE = 'http://127.0.0.1:8000';
-const ELECTRICAL_API = 'http://127.0.0.1:8001';
-
-// 危险区域颜色映射
-const RISK_COLORS = {
-    '高': '#e74c3c',
-    '中': '#f39c12',
-    '低': '#27ae60'
-};
-
-// ============================================================
-// 1. 初始化地图
-// ============================================================
-const map = L.map('map', { zoomControl: true }).setView([30.2935, 120.0080], 18);
-
-// 底图：Esri 卫星影像
-const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    attribution: 'Esri World Imagery'
-}).addTo(map);
-
-// 底图切换
-const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: 'OpenStreetMap'
-});
-const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-    maxZoom: 19, attribution: 'Google Satellite'
-});
-L.control.layers({
-    "Esri 卫星影像": esriImagery,
-    "Google 卫星影像": googleSat,
-    "OpenStreetMap": osm
-}, null, { position: 'topleft' }).addTo(map);
-
-// 比例尺
-L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
-
-// ============================================================
-// 2. 模拟人员数据（与后端 all_people 对齐）
-//    坐标使用完整版 GeoJSON 的坐标体系
-// ============================================================
-const people = [
-    { person_id: 'P001', lng: 120.008, lat: 30.2945, name: '张三', role: '挖掘机操作员' },
-    { person_id: 'P002', lng: 120.0100, lat: 30.2935, name: '李四', role: '吊装指挥' },
-    { person_id: 'P003', lng: 120.011, lat: 30.292, name: '王五', role: '安全员' },
-    { person_id: 'P004', lng: 120.008, lat: 30.2910, name: '赵六', role: '电工' },
-    { person_id: 'P005', lng: 120.006, lat: 30.293, name: '孙七', role: '项目经理' }
-];
-
-// ============================================================
-// 3. 加载本地 GeoJSON 并渲染危险区域
-// ============================================================
-let zoneLayer = null;
-let personLayer = null;
-let bufferLayer = null;
-
-fetch('danger_zones.geojson')
-    .then(res => res.json())
-    .then(data => {
-        // 渲染危险区域多边形
-        zoneLayer = L.geoJSON(data, {
-            style: feature => ({
-                color: RISK_COLORS[feature.properties.risk_level] || '#999',
-                weight: 3,
-                fillColor: RISK_COLORS[feature.properties.risk_level] || '#999',
-                fillOpacity: 0.3
-            }),
-            onEachFeature: (feature, layer) => {
-                const p = feature.properties;
-                layer.bindPopup(`
-                    <div style="min-width:180px;">
-                        <b style="font-size:15px;">${p.zone_id} - ${p.zone_type}</b><hr style="margin:4px 0;">
-                        <b>区域编号：</b>${p.zone_id}<br>
-                        <b>区域类型：</b>${p.zone_type}<br>
-                        <b>风险等级：</b><span style="color:${RISK_COLORS[p.risk_level]}">${p.risk_level}</span><br>
-                        ${p.buffer_radius ? `<b>缓冲半径：</b>${p.buffer_radius}米<br>` : ''}
-                        ${p.alert ? `<b>预警：</b>${p.alert}` : ''}
-                    </div>
-                `);
-            }
-        }).addTo(map);
-
-        // 渲染缓冲区圆圈
-        bufferLayer = L.layerGroup();
-        data.features.forEach(f => {
-            const coords = f.geometry.coordinates[0];
-            let lat = 0, lng = 0;
-            for (let i = 0; i < coords.length - 1; i++) {
-                lat += coords[i][1]; lng += coords[i][0];
-            }
-            lat /= (coords.length - 1); lng /= (coords.length - 1);
-            const radius = f.properties.buffer_radius || 5;
-            L.circle([lat, lng], {
-                radius: radius,
-                color: RISK_COLORS[f.properties.risk_level] || '#999',
-                fillColor: RISK_COLORS[f.properties.risk_level] || '#999',
-                fillOpacity: 0.08,
-                dashArray: '8 4',
-                weight: 2
-            }).addTo(bufferLayer);
-        });
-        bufferLayer.addTo(map);
-
-        // 缩放到所有区域
-        map.fitBounds(zoneLayer.getBounds(), { padding: [50, 50] });
-    })
-    .catch(err => {
-        console.error('GeoJSON 加载失败:', err);
-        document.getElementById('zone-list').innerHTML = '<span style="color:#e74c3c;">GeoJSON 加载失败，请确认 danger_zones.geojson 在同目录下</span>';
-    });
-
-// ============================================================
-// 4. 调用后端接口：批量判断人员状态
-// ============================================================
-function loadPeopleStatus() {
-    const peopleSimple = people.map(p => ({
-        person_id: p.person_id,
-        lng: p.lng,
-        lat: p.lat
-    }));
-
-    fetch(`${API_BASE}/check_danger_batch`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ people: peopleSimple })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (personLayer) personLayer.remove();
-        personLayer = L.layerGroup();
-
-        data.results.forEach(r => {
-            const person = people.find(p => p.person_id === r.person_id);
-            if (!person) return;
-
-            const color = r.inside_zone ? '#e74c3c' : (r.in_buffer ? '#f39c12' : '#27ae60');
-            const status = r.inside_zone ? '在危险区内' : (r.in_buffer ? '靠近危险区' : '安全');
-
-            L.circleMarker([person.lat, person.lng], {
-                radius: 10,
-                color: '#fff',
-                weight: 2,
-                fillColor: color,
-                fillOpacity: 0.9
-            }).addTo(personLayer).bindPopup(`
-                <div style="min-width:200px;">
-                    <b style="font-size:15px;">${r.person_id} - ${person.name}</b><hr style="margin:4px 0;">
-                    <b>人员编号：</b>${r.person_id}<br>
-                    <b>姓名：</b>${person.name}<br>
-                    <b>岗位：</b>${person.role}<br>
-                    <b>状态：</b><span style="color:${color}">${status}</span><br>
-                    ${r.zone_id ? `<b>所在区域：</b>${r.zone_id} ${r.zone_type || ''}<br>` : ''}
-                    <b>风险等级：</b><span style="color:${RISK_COLORS[r.risk_level] || '#999'}">${r.risk_level}</span><br>
-                    ${r.distance_to_boundary ? `<b>距边界：</b>${r.distance_to_boundary}度<br>` : ''}
-                    <b>预警：</b>${r.alert}
-                </div>
-            `).bindTooltip(r.person_id, { permanent: false, direction: 'top', offset: [0, -12] });
-        });
-
-        personLayer.addTo(map);
-
-        // 更新 API 状态
-        document.getElementById('api-status-dot').className = 'dot dot-green';
-        document.getElementById('api-status-text').textContent = '后端已连接';
-    })
-    .catch(err => {
-        console.error('人员状态加载失败:', err);
-        const isNetworkError = err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
-        if (isNetworkError) {
-            document.getElementById('api-status-dot').className = 'dot dot-red';
-            document.getElementById('api-status-text').textContent = '后端未连接（请启动 FastAPI）';
-        }
-        // 即使后端没连上，也显示人员点（灰色）
-        if (personLayer) personLayer.remove();
-        personLayer = L.layerGroup();
-        people.forEach(person => {
-            L.circleMarker([person.lat, person.lng], {
-                radius: 10, color: '#fff', weight: 2,
-                fillColor: '#999', fillOpacity: 0.6
-            }).addTo(personLayer).bindPopup(`
-                <b>${person.person_id} - ${person.name}</b><br>
-                岗位：${person.role}<br>
-                <i style="color:#999;">后端未连接，无法获取风险状态</i>
-            `);
-        });
-        personLayer.addTo(map);
-    });
+function notice(message){$('notice').textContent=message;$('notice').hidden=!message;}
+function status(id,message,ok){$(id).textContent=message;$(id).className=ok?'status-ok':'status-bad';}
+function localTime(value){const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleTimeString('zh-CN',{hour12:false}):'时间未知';}
+async function request(url,options={}){
+    const response=await fetch(url,{...options,signal:AbortSignal.timeout(12000)});
+    if(!response.ok){let message=`请求失败（${response.status}）`;try{const body=await response.json();if(typeof body.detail==='string')message=body.detail;}catch{}throw new Error(message);}
+    return response.json();
 }
-
-// ============================================================
-// 5. 调用后端接口：风险热力图 + 区域汇总
-// ============================================================
-function loadHeatmap() {
-    fetch(`${API_BASE}/risk_heatmap`)
-        .then(res => res.json())
-        .then(data => {
-            const panel = document.getElementById('zone-list');
-            const riskClass = (level) => level === '高' ? 'high' : (level === '中' ? 'mid' : 'low');
-
-            panel.innerHTML = data.heatmap.map(h => `
-                <div class="zone-card ${riskClass(h.risk_level)}">
-                    <div class="zone-title">${h.zone_id} ${h.zone_type}</div>
-                    <div class="zone-row">风险等级：<span class="risk-${riskClass(h.risk_level)}">${h.risk_level}</span></div>
-                    <div class="zone-row">区域内人数：${h.people_count}</div>
-                    <div class="zone-row">风险评分：<b>${h.risk_score}</b></div>
-                </div>
-            `).join('');
-        })
-        .catch(err => {
-            console.error('热力图加载失败:', err);
-        });
+function icon(kind,color){return L.divIcon({className:`map-pin ${kind}`,html:`<span style="--pin:${color}"></span>`,iconSize:[15,15],iconAnchor:[7.5,7.5]});}
+function showDetail(info){$('detail-content').innerHTML=`<h3>${escapeHtml(info.title)}</h3><p>${escapeHtml(info.text)}</p>`;$('scene-detail').hidden=false;}
+$('close-detail').addEventListener('click',()=>{$('scene-detail').hidden=true;});
+function syncScene(){scene?.update(state);window.SiteManagement?.render();}
+function counts(){
+    $('metric-zones').textContent=state.zones?.features.length??'—';
+    const people=state.spatial?.people;
+    const current=people?.filter(p=>window.SiteUI.fresh(p));
+    $('metric-people').textContent=current?.length??'—';
+    $('people-note').textContent=people?`登记 ${people.length} 人 · 过期 ${people.length-current.length} 人`:'空间数据未知';
+    $('metric-high').textContent=state.devices?.filter(d=>deviceState(d).level==='高').length??'—';
+    $('metric-unknown').textContent=people && state.devices ? people.length-current.length+state.devices.filter(d=>deviceState(d).level==='未知').length:'—';
 }
-
-// ============================================================
-// 6. 图层控制
-// ============================================================
-setTimeout(() => {
-    if (zoneLayer && bufferLayer && personLayer) {
-        L.control.layers(null, {
-            "危险区域": zoneLayer,
-            "安全缓冲区": bufferLayer,
-            "人员定位": personLayer
-        }, { collapsed: false, position: 'bottomleft' }).addTo(map);
+function resetView(){if(state.mode==='3d')scene?.reset();else if(state.zones)map.fitBounds(zoneLayer.getBounds(),{padding:[40,40]});}
+async function setMode(mode){
+    if(mode==='3d'){
+        try{
+            if(!scene){
+                if(!sceneLoading)sceneLoading=import('./scene3d.js?v=3').then(({SiteScene})=>{scene=new SiteScene($('scene3d'),showDetail);scene.update(state);return scene;});
+                await sceneLoading;
+            }
+        }catch(error){sceneLoading=null;notice('当前设备无法启动 3D，已保留二维视图。可刷新后重试。');return;}
     }
-}, 2000);
+    state.mode=mode;
+    $('map').hidden=mode!=='2d';$('scene3d').hidden=mode!=='3d';
+    $('view-2d').classList.toggle('active',mode==='2d');$('view-3d').classList.toggle('active',mode==='3d');
+    $('view-2d').setAttribute('aria-pressed',mode==='2d');$('view-3d').setAttribute('aria-pressed',mode==='3d');
+    $('basemap').hidden=mode==='3d';$('compass').hidden=mode==='3d';
+    $('view-note').textContent=mode==='3d'?'拖动旋转 · 滚轮缩放 · 右键平移 · 点击对象查看':'圆点为人员，方块为设备；点击对象可查看详情。';
+    $('view-help').textContent=mode==='3d'?'3D 为空间关系示意；建筑、塔吊及人员模型均为设计示意，非现场实测。两种视图共享同一观测数据。':'坐标与业务图层可离线查看。卫星影像需要联网。';
+    scene?.setVisible(mode==='3d');if(mode==='2d')map.invalidateSize();
+}
+$('view-2d').addEventListener('click',()=>setMode('2d'));
+$('view-3d').addEventListener('click',()=>setMode('3d'));
+$('reset-view').addEventListener('click',resetView);
+$('basemap').addEventListener('click',()=>{satellite=!satellite;satellite?base.addTo(map):map.removeLayer(base);$('basemap').setAttribute('aria-pressed',satellite);$('basemap').textContent=satellite?'关闭底图':'卫星底图';});
 
-// ============================================================
-// 7. 初始加载 + 定时刷新（每30秒）
-// ============================================================
-loadPeopleStatus();
-loadHeatmap();
-loadDevices();
-loadDeviceMap();
-setInterval(() => {
-    loadPeopleStatus();
-    loadHeatmap();
-    loadDevices();
-}, 30000);
-
-// ============================================================
-// 8. Tab 切换
-// ============================================================
-document.querySelectorAll('#panel-tabs .tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        document.querySelectorAll('#panel-tabs .tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+async function loadZones(){
+    try{const [zones,buffers]=await Promise.all([request(`${API_BASE}/zones.geojson`),request(`${API_BASE}/buffers.geojson`)]);
+        state.zones=zones;state.buffers=buffers;zoneLayer.clearLayers().addData(zones);bufferLayer.clearLayers().addData(buffers);resetView();syncScene();counts();
+    }catch(error){notice('区域及缓冲图层未加载，请检查空间服务后点击刷新。');}
+}
+function renderSpatial(){
+    personLayer.clearLayers();
+    if(!state.spatial){$('zone-list').textContent='无法读取人员及区域数据。';counts();syncScene();return;}
+    const data=state.spatial,byId=new Map(data.results.map(r=>[r.person_id,r]));
+    const awaitingFreshCounts=data.people.some(p=>p.fresh!==undefined && p.fresh!==window.SiteUI.fresh(p));
+    data.people.forEach(p=>{
+        const r=byId.get(p.person_id),view=personState(p,r);
+        L.marker([p.lat,p.lng],{icon:icon('person',view.color)}).addTo(personLayer)
+            .bindPopup(`<b>${escapeHtml(p.person_id)} · 人员</b><br>${escapeHtml(view.label)}<br>${escapeHtml(view.level==='未知'?'仅为最后已知位置':r?.alert)}<br>采集 ${escapeHtml(localTime(p.timestamp))}`)
+            .bindTooltip(escapeHtml(p.person_id));
     });
+    $('zone-list').innerHTML=data.heatmap.map(z=>`<div class="zone-card" style="border-left-color:${colors[z.risk_level]}"><div class="card-top"><strong>${escapeHtml(z.zone_id)} ${escapeHtml(z.zone_type)}</strong><span class="risk-label">${escapeHtml(z.risk_level)}风险</span></div><div class="card-values"><span>有效人数 <b>${awaitingFreshCounts?'待核验':z.people_count}</b></span><span>规则评分 <b>${awaitingFreshCounts?'—':z.risk_score}</b></span></div><div class="card-meta">区域重叠时分别计数；全场人数按编号去重。</div></div>`).join('')||'<p class="empty">暂无区域</p>';
+    counts();syncScene();
+}
+async function loadState(){
+    if(spatialBusy)return;spatialBusy=true;
+    try{state.spatial=await request(`${API_BASE}/state`);status('gis-status',`空间已连接 · 版本 ${state.spatial.revision}`,true);}
+    catch{state.spatial=null;status('gis-status','空间断连 · 人员状态未知',false);}
+    finally{spatialBusy=false;renderSpatial();}
+}
+function renderDevices(){
+    deviceLayer.clearLayers();
+    if(!state.devices){$('device-list').textContent='无法获取设备数据，状态未知。';counts();syncScene();return;}
+    const filter=$('device-filter').value;
+    const cards=[];
+    for(const d of state.devices){
+        const view=deviceState(d);
+        const description=`<b>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</b><br>${view.label}<br>负荷${d.load}% · 温度${d.temperature}℃ · 漏电${d.leakage}mA<br>采集 ${escapeHtml(localTime(d.timestamp))}`;
+        L.marker([d.location[1],d.location[0]],{icon:icon('device',view.color)}).addTo(deviceLayer).bindPopup(description).bindTooltip(escapeHtml(d.device_id));
+        if(filter!=='all' && filter!==view.level)continue;
+        cards.push(`<div class="device-card" style="border-left-color:${view.color}"><div class="card-top"><strong>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</strong><span class="risk-label">${view.label}</span></div><div class="card-values"><span>${d.load}%</span><span>${d.temperature}℃</span><span>${d.leakage}mA</span></div><div>${escapeHtml(view.level==='未知'?'观测过期，不能据此判断当前安全':d.alert)}</div><div class="card-meta">${d.source==='demo'?'演示观测':'上报观测'} · ${escapeHtml(localTime(d.timestamp))}</div><button type="button" class="locate" data-device="${escapeHtml(d.device_id)}">定位 ${escapeHtml(d.device_id)}</button></div>`);
+    }
+    $('device-list').innerHTML=cards.join('')||'<p class="empty">该分类暂无设备</p>';
+    counts();syncScene();
+}
+function acceptDevices(data){
+    state.devices=data.devices;state.snapshot=data.snapshot_id;
+    $('snapshot-label').textContent=`观测 ${data.snapshot_id.slice(0,8)} · 2D / 3D 同源`;
+    const selected=$('route-start').value;$('route-start').innerHTML=data.devices.map(d=>`<option value="${escapeHtml(d.device_id)}">${escapeHtml(d.device_id)}</option>`).join('');
+    if(data.devices.some(d=>d.device_id===selected))$('route-start').value=selected;
+    status('device-status','电气服务已连接',true);renderDevices();
+}
+async function loadDevices(){
+    if(deviceBusy)return;deviceBusy=true;
+    try{acceptDevices(await request(`${ELECTRICAL_API}/devices`));}
+    catch{state.devices=null;state.route=[];routeLayer.clearLayers();$('snapshot-label').textContent='';$('route-start').innerHTML='';status('device-status','电气断连 · 当前状态未知',false);renderDevices();}
+    finally{deviceBusy=false;}
+}
+$('device-filter').addEventListener('change',renderDevices);
+$('device-list').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-device]');if(!button)return;
+    const d=state.devices?.find(d=>d.device_id===button.dataset.device);if(!d)return;
+    if(state.mode==='3d')scene?.focus(...d.location);else map.setView([d.location[1],d.location[0]],19);
+    showDetail({title:`${d.device_id} ${d.device_type}`,text:`${deviceState(d).label}。负荷${d.load}% / 温度${d.temperature}℃ / 漏电${d.leakage}mA。`});
 });
-
-// ============================================================
-// 9. 电气设备面板
-// ============================================================
-let deviceLayer = null;
-
-function loadDevices() {
-    fetch(`${ELECTRICAL_API}/devices`)
-        .then(res => res.json())
-        .then(data => {
-            const panel = document.getElementById('device-list');
-            if (!panel) return;
-            const riskClass = (level) => level === '高' ? 'high' : (level === '中' ? 'mid' : 'low');
-
-            panel.innerHTML = data.devices.map(d => {
-                const color = RISK_COLORS[d.risk_level] || '#999';
-                return `
-                    <div class="device-card ${riskClass(d.risk_level)}">
-                        <div class="device-title">${d.device_id} ${d.device_type}</div>
-                        <div class="device-row">负荷：${d.load}% | 温度：${d.temperature}℃ | 漏电：${d.leakage}mA</div>
-                        <div class="device-row">风险评分：<span class="risk-${riskClass(d.risk_level)}">${d.risk_score}</span>（${d.risk_level}）</div>
-                        <div class="device-row"><i>${d.alert}</i></div>
-                    </div>
-                `;
-            }).join('');
-        })
-        .catch(err => {
-            console.error('电气数据加载失败:', err);
-            const panel = document.getElementById('device-list');
-            if (panel) panel.innerHTML = '<span style="color:#e74c3c;">电气后端未连接（请启动 8001 端口服务）</span>';
-        });
-}
-
-// ============================================================
-// 10. 地图配电箱图层
-// ============================================================
-function loadDeviceMap() {
-    fetch(`${ELECTRICAL_API}/devices.geojson`)
-        .then(res => res.json())
-        .then(data => {
-            if (deviceLayer) deviceLayer.remove();
-            deviceLayer = L.geoJSON(data, {
-                pointToLayer: (feature, latlng) => {
-                    const color = RISK_COLORS[feature.properties.risk_level] || '#999';
-                    return L.circleMarker(latlng, {
-                        radius: 7,
-                        color: '#fff',
-                        weight: 2,
-                        fillColor: color,
-                        fillOpacity: 0.9
-                    });
-                },
-                onEachFeature: (feature, layer) => {
-                    const p = feature.properties;
-                    const color = RISK_COLORS[p.risk_level] || '#999';
-                    layer.bindPopup(`
-                        <div style="min-width:160px;">
-                            <b style="font-size:14px;">${p.device_id} - ${p.device_type}</b><hr style="margin:4px 0;">
-                            <b>设备编号：</b>${p.device_id}<br>
-                            <b>设备类型：</b>${p.device_type}<br>
-                            <b>风险评分：</b><span style="color:${color};font-weight:bold;">${p.risk_score}</span><br>
-                            <b>风险等级：</b><span style="color:${color};">${p.risk_level}</span>
-                        </div>
-                    `);
-                    layer.bindTooltip(p.device_id, { permanent: false, direction: 'top', offset: [0, -10] });
-                }
-            }).addTo(map);
-
-            // 更新图层控制
-            setTimeout(() => {
-                if (zoneLayer && deviceLayer) {
-                    L.control.layers(null, {
-                        "危险区域": zoneLayer,
-                        "安全缓冲区": bufferLayer,
-                        "人员定位": personLayer,
-                        "电气设备": deviceLayer
-                    }, { collapsed: false, position: 'bottomleft' }).addTo(map);
-                }
-            }, 100);
-        })
-        .catch(err => {
-            console.error('电气设备地图加载失败:', err);
-        });
-}
+$('simulate').addEventListener('click',async()=>{
+    if(simulationBusy || deviceBusy || spatialBusy)return;simulationBusy=true;$('simulate').disabled=true;
+    const results=await Promise.allSettled([request(`${ELECTRICAL_API}/simulation/tick`,{method:'POST'}),request(`${API_BASE}/simulation/tick`,{method:'POST'})]);
+    if(results[0].status==='fulfilled')acceptDevices(results[0].value);
+    if(results[1].status==='fulfilled'){state.spatial=results[1].value.state;renderSpatial();status('gis-status',`空间已连接 · 版本 ${state.spatial.revision}`,true);}
+    const failures=results.map((r,i)=>r.status==='rejected'?`${i?'人员':'电气'}：${r.reason.message}`:null).filter(Boolean);
+    notice(failures.length?failures.join('；'):'演示观测已更新；刷新只读数据，不会生成新观测。');
+    simulationBusy=false;$('simulate').disabled=false;
+});
+$('refresh').addEventListener('click',async()=>{if(simulationBusy)return;$('refresh').disabled=true;await Promise.all([loadZones(),loadState(),loadDevices()]);$('refresh').disabled=false;});
+const tabs=[...document.querySelectorAll('#panel-tabs .tab')];
+function selectTab(tab){tabs.forEach(t=>{const active=t===tab;t.classList.toggle('active',active);t.setAttribute('aria-selected',active);t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).classList.toggle('active',active);});}
+tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>selectTab(tab));tab.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();const next=tabs[(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next);next.focus();}});});
+document.querySelectorAll('[data-query]').forEach(button=>button.addEventListener('click',()=>{$('query').value=button.dataset.query;$('query').focus();}));
+$('ask-form').addEventListener('submit',async event=>{
+    event.preventDefault();$('ask-button').disabled=true;const query=$('query').value.trim();
+    const options={method:'POST'};let points=null;
+    if(/巡检|路线/.test(query)){
+        state.route=[];routeLayer.clearLayers();syncScene();
+        if(!state.devices || state.devices.length<2){$('answer').textContent='设备点位不足，请先恢复连接。';$('ask-button').disabled=false;return;}
+        // Copy the exact request points; never redraw a response against a later refresh.
+        points=state.devices.map(d=>({id:d.device_id,lng:d.location[0],lat:d.location[1],risk:d.risk_score}));
+        options.headers={'Content-Type':'application/json'};options.body=JSON.stringify({start_id:$('route-start').value,points});
+    }
+    $('answer').textContent='正在读取数据并执行工具…';
+    try{const data=await request(`${AGENT_API}/chat?query=${encodeURIComponent(query)}`,options);$('answer').textContent=data.answer;
+        if(data.success && data.route_data && points){const byId=new Map(points.map(p=>[p.id,[p.lng,p.lat]]));state.route=data.route_data.route.map(id=>{if(!byId.has(id))throw new Error('路线包含未知点');return byId.get(id);});L.polyline(state.route.map(([lng,lat])=>[lat,lng]),{color:'#735cdb',dashArray:'6 6',weight:3}).addTo(routeLayer);syncScene();}
+    }catch(error){$('answer').textContent=`未取得有效结果：${error.message}`;state.route=[];routeLayer.clearLayers();syncScene();}
+    finally{$('ask-button').disabled=false;}
+});
+window.addEventListener('pagehide',event=>{if(!event.persisted)scene?.dispose();});
+Promise.all([loadZones(),loadState(),loadDevices()]).then(()=>setMode('3d'));
+setInterval(()=>{if(!simulationBusy){loadState();loadDevices();}},30000);
+setInterval(()=>{const key=JSON.stringify([state.devices?.map(d=>deviceState(d).level),state.spatial?.people.map(p=>window.SiteUI.fresh(p))]);if(key!==lastFreshness){lastFreshness=key;renderDevices();renderSpatial();if(state.spatial?.people.some(p=>p.fresh!==undefined && p.fresh!==window.SiteUI.fresh(p)))loadState();}},5000);

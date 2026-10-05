@@ -1,229 +1,216 @@
-﻿from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+"""Electrical demo: telemetry writes snapshots; reads never simulate measurements."""
+from fastapi import FastAPI, HTTPException
+from common.runtime import configure_api, is_fresh
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from datetime import datetime, timezone
+from pathlib import Path
+import os
+import json
 import random
-from datetime import datetime
+import sqlite3
+import uuid
+from contextlib import contextmanager
 
-app = FastAPI(title="电气风险接口", description="工地安全监测系统 - 电气模块（lry负责）")
+app = FastAPI(title="电气风险接口")
+configure_api(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ============================================================
-# 模拟电气设备数据
-# 坐标与指标值与 工地布局图/electrical_boxes.geojson 保持一致
-# ============================================================
-devices = [
-    {"device_id": "D001", "device_type": "配电箱", "location": [120.1170, 30.2800], "load": 35, "temperature": 45, "leakage": 0.1, "model": "XL-100", "install_date": "2025-06-15", "last_check": "2026-09-01"},
-    {"device_id": "D002", "device_type": "配电箱", "location": [120.1180, 30.2798], "load": 85, "temperature": 62, "leakage": 0.3, "model": "XL-200", "install_date": "2025-06-15", "last_check": "2026-08-15"},
-    {"device_id": "D003", "device_type": "开关柜", "location": [120.1190, 30.2802], "load": 45, "temperature": 50, "leakage": 0.2, "model": "KG-50", "install_date": "2025-06-20", "last_check": "2026-09-10"},
-    {"device_id": "D004", "device_type": "配电箱", "location": [120.1165, 30.2805], "load": 15, "temperature": 40, "leakage": 0.1, "model": "XL-100", "install_date": "2025-06-15", "last_check": "2026-09-05"},
-    {"device_id": "D005", "device_type": "电缆", "location": [120.1185, 30.2810], "load": 60, "temperature": 55, "leakage": 0.25, "model": "DL-3x50", "install_date": "2025-06-25", "last_check": "2026-09-08"},
-    {"device_id": "D006", "device_type": "配电箱", "location": [120.1195, 30.2795], "load": 72, "temperature": 58, "leakage": 0.28, "model": "XL-150", "install_date": "2025-07-01", "last_check": "2026-08-20"},
-    {"device_id": "D007", "device_type": "开关柜", "location": [120.1175, 30.2812], "load": 30, "temperature": 42, "leakage": 0.15, "model": "KG-30", "install_date": "2025-06-20", "last_check": "2026-09-12"},
-    {"device_id": "D008", "device_type": "电缆", "location": [120.1182, 30.2808], "load": 55, "temperature": 52, "leakage": 0.22, "model": "DL-3x35", "install_date": "2025-06-25", "last_check": "2026-09-03"}
-]
-
-
-# ============================================================
-# 风险评分模型（阈值线性映射 + 加权融合）
-#
-# 与「物理量直接除以满量程」的做法相比，本模型引入安全阈值概念：
-# 低于安全阈值不产生风险，高于危险阈值记满分，中间线性插值。
-# 这更符合现场临时用电的评判逻辑——负荷 60% 属正常工作状态，
-# 不应与负荷 0% 一样被计入风险。
-#
-#   risk_score = 0.45 × 漏电超标度
-#              + 0.35 × 负荷超标度
-#              + 0.20 × 温度超标度
-#
-# 权重依据：
-#   漏电 0.45 —— 直接导致触电伤亡，是临时用电最致命的风险
-#   负荷 0.35 —— 过载会引发电缆发热甚至起火
-#   温度 0.20 —— 温度多为过载/漏电的结果性指标，非独立成因
-# ============================================================
-
-# 各指标的安全阈值 / 危险阈值
-LOAD_SAFE, LOAD_DANGER = 60.0, 95.0         # 负荷百分比 %，60% 为轻载上限，95% 接近满载
-TEMP_SAFE, TEMP_DANGER = 40.0, 70.0         # 箱体温度 ℃，40℃ 为常温上限，70℃ 为危险上限
-LEAK_SAFE, LEAK_DANGER = 0.1, 0.5           # 漏电电流 mA，0.1mA 为安全上限，0.5mA 为危险上限
-
-# 三项指标权重（合计 1.0）
+# Demonstration thresholds retained from the original project; not certified equipment limits.
+LOAD_SAFE, LOAD_DANGER = 60.0, 95.0
+TEMP_SAFE, TEMP_DANGER = 40.0, 70.0
+LEAK_SAFE, LEAK_DANGER = 0.1, 0.5
 W_LEAK, W_LOAD, W_TEMP = 0.45, 0.35, 0.20
+LOAD_ALERT, TEMP_ALERT, LEAK_ALERT = 80.0, 55.0, 0.3
+RULE_VERSION = "demo-electrical-v2"
 
-# 预警触发阈值（与评分阈值分开设置，避免边界值频繁误报）
-LOAD_ALERT = 80.0                           # 负荷超过 80% 提示过载
-TEMP_ALERT = 55.0                           # 温度超过 55℃ 提示高温
-LEAK_ALERT = 0.3                            # 漏电超过 0.3mA 提示漏电
+# Demo fixtures share the GIS site coordinate frame.
+devices = [{'device_id': 'D001', 'device_type': '配电箱', 'location': [120.007, 30.293], 'load': 35, 'temperature': 45, 'leakage': 0.1, 'model': 'XL-100', 'install_date': '2025-06-15', 'last_check': '2026-09-01', 'site_id': 'site_a'}, {'device_id': 'D002', 'device_type': '配电箱', 'location': [120.008, 30.2928], 'load': 85, 'temperature': 62, 'leakage': 0.3, 'model': 'XL-200', 'install_date': '2025-06-15', 'last_check': '2026-08-15', 'site_id': 'site_a'}, {'device_id': 'D003', 'device_type': '开关柜', 'location': [120.009, 30.2932], 'load': 45, 'temperature': 50, 'leakage': 0.2, 'model': 'KG-50', 'install_date': '2025-06-20', 'last_check': '2026-09-10', 'site_id': 'site_a'}, {'device_id': 'D004', 'device_type': '配电箱', 'location': [120.0065, 30.2935], 'load': 15, 'temperature': 40, 'leakage': 0.1, 'model': 'XL-100', 'install_date': '2025-06-15', 'last_check': '2026-09-05', 'site_id': 'site_a'}, {'device_id': 'D005', 'device_type': '电缆', 'location': [120.0085, 30.294], 'load': 60, 'temperature': 55, 'leakage': 0.25, 'model': 'DL-3x50', 'install_date': '2025-06-25', 'last_check': '2026-09-08', 'site_id': 'site_a'}, {'device_id': 'D006', 'device_type': '配电箱', 'location': [120.0095, 30.2925], 'load': 72, 'temperature': 58, 'leakage': 0.28, 'model': 'XL-150', 'install_date': '2025-07-01', 'last_check': '2026-08-20', 'site_id': 'site_a'}, {'device_id': 'D007', 'device_type': '开关柜', 'location': [120.0075, 30.2942], 'load': 30, 'temperature': 42, 'leakage': 0.15, 'model': 'KG-30', 'install_date': '2025-06-20', 'last_check': '2026-09-12', 'site_id': 'site_a'}, {'device_id': 'D008', 'device_type': '电缆', 'location': [120.0082, 30.2938], 'load': 55, 'temperature': 52, 'leakage': 0.22, 'model': 'DL-3x35', 'install_date': '2025-06-25', 'last_check': '2026-09-03', 'site_id': 'site_a'}]
+
+DB_PATH = Path(os.environ.get("ELECTRICAL_DB_PATH", Path(__file__).with_name("data.db")))
 
 
 def _risk_ratio(value, safe, danger):
-    """把物理量线性映射为 0-1 的超标程度"""
-    if value <= safe:
-        return 0.0
-    if value >= danger:
-        return 1.0
-    return (value - safe) / (danger - safe)
+    return max(0.0, min(1.0, (value - safe) / (danger - safe)))
+
+
+def weighted_score(load, temperature, leakage):
+    return round(W_LOAD * _risk_ratio(load, LOAD_SAFE, LOAD_DANGER)
+                 + W_TEMP * _risk_ratio(temperature, TEMP_SAFE, TEMP_DANGER)
+                 + W_LEAK * _risk_ratio(leakage, LEAK_SAFE, LEAK_DANGER), 2)
+
+
+def danger_reasons(load, temperature, leakage):
+    return [name for value, limit, name in [(load, LOAD_DANGER, "负荷达到危险阈值"),
+            (temperature, TEMP_DANGER, "温度达到危险阈值"),
+            (leakage, LEAK_DANGER, "漏电达到危险阈值")] if value >= limit]
 
 
 def calc_risk_score(load, temperature, leakage):
-    """计算电气风险评分 0-1"""
-    r_load = _risk_ratio(load, LOAD_SAFE, LOAD_DANGER)
-    r_temp = _risk_ratio(temperature, TEMP_SAFE, TEMP_DANGER)
-    r_leak = _risk_ratio(leakage, LEAK_SAFE, LEAK_DANGER)
-
-    risk = W_LEAK * r_leak + W_LOAD * r_load + W_TEMP * r_temp
-    return round(min(risk, 1.0), 2)
+    # Preserve the public score/level contract; ranking_score retains the original weighted value.
+    score = weighted_score(load, temperature, leakage)
+    return max(0.7, score) if danger_reasons(load, temperature, leakage) else score
 
 
 def get_risk_level(score):
-    """风险等级映射"""
-    if score >= 0.7:
-        return "高"
-    if score >= 0.3:
-        return "中"
-    return "低"
+    return "高" if score >= 0.7 else "中" if score >= 0.3 else "低"
 
 
 def get_alert(load, temperature, leakage, score):
-    """生成预警文字"""
-    alerts = []
-    if load >= LOAD_ALERT:
-        alerts.append("过载")
-    if temperature >= TEMP_ALERT:
-        alerts.append("高温")
-    if leakage >= LEAK_ALERT:
-        alerts.append("漏电")
+    alerts = [name for value, limit, name in [(load, LOAD_ALERT, "负荷预警"),
+              (temperature, TEMP_ALERT, "高温"), (leakage, LEAK_ALERT, "漏电预警")] if value >= limit]
     if not alerts:
         return "正常"
-    if score >= 0.7:
-        level = "严重"
-    elif score >= 0.3:
-        level = "警告"
-    else:
-        level = "关注"
-    return f"{level}：" + "、".join(alerts)
-
-
-# ============================================================
-# 动态数据模拟
-# ============================================================
-def simulate_device_data(device):
-    """模拟设备数据波动"""
-    d = device.copy()
-    d["load"] = min(max(d["load"] + random.randint(-10, 10), 0), 100)
-    d["temperature"] = min(max(d["temperature"] + random.randint(-5, 5), 20), 100)
-    d["leakage"] = round(max(d["leakage"] + random.uniform(-0.1, 0.1), 0), 2)
-    d["timestamp"] = datetime.now().isoformat()
-    return d
+    prefix = "严重" if score >= 0.7 else "警告" if score >= 0.3 else "关注"
+    return prefix + "：" + "、".join(alerts)
 
 
 def build_device_response(d):
-    """统一构造设备响应（含动态数据+风险评分）"""
-    simulated = simulate_device_data(d)
-    score = calc_risk_score(simulated["load"], simulated["temperature"], simulated["leakage"])
-    record_history(d["device_id"], score)
-    return {
-        **simulated,
-        "risk_score": score,
-        "risk_level": get_risk_level(score),
-        "alert": get_alert(simulated["load"], simulated["temperature"], simulated["leakage"], score)
-    }
+    load, temperature, leakage = d["load"], d["temperature"], d["leakage"]
+    score = calc_risk_score(load, temperature, leakage)
+    reasons = danger_reasons(load, temperature, leakage)
+    return {**d, "risk_score": score, "ranking_score": weighted_score(load, temperature, leakage),
+            "risk_level": get_risk_level(score), "hard_alert": bool(reasons),
+            "hard_alert_reasons": reasons, "rule_version": RULE_VERSION,
+            "alert": get_alert(load, temperature, leakage, score)}
 
 
-# ============================================================
-# 风险历史记录
-# ============================================================
-history = {d["device_id"]: [] for d in devices}
+@contextmanager
+def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB_PATH, timeout=10)
+    try:
+        with db:
+            yield db
+    finally:
+        db.close()
 
 
-def record_history(device_id, score):
-    history[device_id].append({
-        "timestamp": datetime.now().isoformat(),
-        "risk_score": score
-    })
-    history[device_id] = history[device_id][-20:]
+def save_snapshot(db, rows):
+    snapshot_id = uuid.uuid4().hex
+    data = {"snapshot_id": snapshot_id, "timestamp": datetime.now(timezone.utc).isoformat(),
+            "devices": [build_device_response(d) for d in rows]}
+    for d in data["devices"]:
+        d["snapshot_id"] = snapshot_id
+    db.execute("INSERT INTO snapshots (id, payload) VALUES (?, ?)",
+               (snapshot_id, json.dumps(data, ensure_ascii=False)))
+    # Bounded retention; clients requesting an expired snapshot receive 404, never a substitute.
+    db.execute("DELETE FROM snapshots WHERE seq NOT IN (SELECT seq FROM snapshots ORDER BY seq DESC LIMIT 100)")
+    return data
 
 
-# ============================================================
-# 接口1：GET /devices — 所有设备状态（动态数据）
-# ============================================================
+def init_db():
+    with connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS snapshots (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE, payload TEXT NOT NULL)")
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM snapshots LIMIT 1").fetchone():
+            now = datetime.now(timezone.utc).isoformat()
+            save_snapshot(db, [{**d, "timestamp": now, "source": "demo", "status": "online"} for d in devices])
+
+
+init_db()
+
+
+def read_snapshot(snapshot_id=None, db=None):
+    if db is None:
+        with connect() as connection:
+            return read_snapshot(snapshot_id, connection)
+    row = db.execute("SELECT payload FROM snapshots WHERE id=?", (snapshot_id,)).fetchone() if snapshot_id else db.execute("SELECT payload FROM snapshots ORDER BY seq DESC LIMIT 1").fetchone()
+    if not row:
+        raise HTTPException(404, "快照不存在或已过期")
+    return json.loads(row[0])
+
+
+class Reading(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    device_id: str = Field(min_length=1)
+    load: float = Field(ge=0)
+    temperature: float
+    leakage: float = Field(ge=0)
+
+
+class TelemetryRequest(BaseModel):
+    readings: list[Reading] = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        ids = [r.device_id for r in self.readings]
+        if len(ids) != len(set(ids)):
+            raise ValueError("设备编号不能重复")
+        return self
+
+
+@app.post("/telemetry")
+def ingest(req: TelemetryRequest):
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        rows = read_snapshot(db=db)["devices"]
+        updates = {r.device_id: r.model_dump() for r in req.readings}
+        unknown = set(updates) - {d["device_id"] for d in rows}
+        if unknown:
+            raise HTTPException(404, "设备不存在：" + ",".join(sorted(unknown)))
+        now = datetime.now(timezone.utc).isoformat()
+        return save_snapshot(db, [{**d, **updates[d["device_id"]], "timestamp": now,
+                                  "source": "telemetry", "status": "online"} if d["device_id"] in updates else d for d in rows])
+
+
+@app.post("/simulation/tick")
+def simulation_tick():
+    if os.getenv("DEMO_MODE","1") != "1":
+        raise HTTPException(403,"正式数据模式不允许模拟采样")
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if any(d.get("source") == "telemetry" for d in read_snapshot(db=db)["devices"]):
+            raise HTTPException(409,"当前含已上报数据，禁止用随机样本覆盖；请使用独立演示数据库")
+        now = datetime.now(timezone.utc).isoformat()
+        rows = [{**d, "load": max(0, min(100, d["load"] + random.randint(-10,10))),
+                 "temperature": d["temperature"] + random.randint(-5,5),
+                 "leakage": round(max(0, d["leakage"] + random.uniform(-0.1,0.1)),2),
+                 "timestamp": now, "source": "demo", "status": "online"} for d in devices]
+        return save_snapshot(db, rows)
+
+
 @app.get("/devices")
-def get_devices():
-    result = [build_device_response(d) for d in devices]
-    return {"devices": result}
+def get_devices(snapshot_id: str | None = None):
+    return read_snapshot(snapshot_id)
 
 
-# ============================================================
-# 接口2：GET /devices/{device_id} — 单设备详情（动态数据）
-# ============================================================
-@app.get("/devices/{device_id}")
-def get_device(device_id: str):
-    for d in devices:
-        if d["device_id"] == device_id:
-            return build_device_response(d)
-    return {"error": "设备不存在"}
+@app.get("/devices.geojson")
+def devices_geojson(snapshot_id: str | None = None):
+    data = read_snapshot(snapshot_id)
+    return {"type": "FeatureCollection", "snapshot_id": data["snapshot_id"],
+            "timestamp": data["timestamp"], "features": [
+                {"type": "Feature", "geometry": {"type": "Point", "coordinates": d["location"]},
+                 "properties": d} for d in data["devices"]]}
 
 
-# ============================================================
-# 接口3：POST /devices/batch — 批量查询
-# ============================================================
 class BatchRequest(BaseModel):
-    device_ids: List[str]
+    device_ids: list[str]
 
 
 @app.post("/devices/batch")
-def get_devices_batch(req: BatchRequest):
-    results = []
-    for device_id in req.device_ids:
-        for d in devices:
-            if d["device_id"] == device_id:
-                results.append(build_device_response(d))
-    return {"devices": results}
+def get_devices_batch(req: BatchRequest, snapshot_id: str | None = None):
+    data = read_snapshot(snapshot_id)
+    by_id = {d["device_id"]: d for d in data["devices"]}
+    if set(req.device_ids) - by_id.keys():
+        raise HTTPException(404, "包含不存在的设备")
+    return {**data, "devices": [by_id[i] for i in dict.fromkeys(req.device_ids)]}
 
 
-# ============================================================
-# 接口4：GET /devices/{device_id}/history — 风险历史记录
-# ============================================================
 @app.get("/devices/{device_id}/history")
 def get_device_history(device_id: str):
-    if device_id not in history:
-        return {"error": "设备不存在"}
-    return {"device_id": device_id, "history": history[device_id]}
+    get_device(device_id)
+    with connect() as db:
+        snapshots = db.execute("SELECT payload FROM snapshots ORDER BY seq").fetchall()
+    records = {}
+    for (payload,) in snapshots:
+        for d in json.loads(payload)["devices"]:
+            if d["device_id"] == device_id:
+                records[d["timestamp"]] = d
+    return {"device_id": device_id, "history": list(records.values())[-20:]}
 
 
-# ============================================================
-# 接口5：GET /devices.geojson — GeoJSON 导出
-# ============================================================
-@app.get("/devices.geojson")
-def devices_geojson():
-    features = []
-    for d in devices:
-        score = calc_risk_score(d["load"], d["temperature"], d["leakage"])
-        features.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": d["location"]
-            },
-            "properties": {
-                "device_id": d["device_id"],
-                "device_type": d["device_type"],
-                "risk_score": score,
-                "risk_level": get_risk_level(score),
-                "load": d["load"],
-                "temperature": d["temperature"],
-                "leakage": d["leakage"],
-                "model": d.get("model", ""),
-                "install_date": d.get("install_date", ""),
-                "last_check": d.get("last_check", "")
-            }
-        })
-    return {"type": "FeatureCollection", "features": features}
+@app.get("/devices/{device_id}")
+def get_device(device_id: str, snapshot_id: str | None = None):
+    for d in read_snapshot(snapshot_id)["devices"]:
+        if d["device_id"] == device_id:
+            return d
+    raise HTTPException(404, "设备不存在")

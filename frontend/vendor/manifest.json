@@ -1,0 +1,60 @@
+{
+  "three": {
+    "version": "0.180.0",
+    "files": {
+      "three.module.js": {
+        "source": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "sha256": "c8211c69345d2e9949dc7a8ac969380497aa0600a5a8ac6a459c8cd02dd9cb8a"
+      },
+      "three.core.js": {
+        "source": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.core.js",
+        "sha256": "eb077d2417f61d3e6d9264c317cabc4ea35769ed6b0ab533067292a550784c20"
+      },
+      "OrbitControls.js": {
+        "source": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js",
+        "sha256": "b97879c748170baadeb3fb84cea1ffdf4674e283dc06042f34e2acb95a76042c"
+      },
+      "LICENSE": {
+        "source": "https://cdn.jsdelivr.net/npm/three@0.180.0/LICENSE",
+        "sha256": "bfe119ea4fd413f5f7ca3fcd63adb0c4a073ed39daa2fe7d3e6b769e21272601"
+      }
+    }
+  },
+  "leaflet": {
+    "version": "1.9.4",
+    "files": {
+      "leaflet.js": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
+        "sha256": "db49d009c841f5ca34a888c96511ae936fd9f5533e90d8b2c4d57596f4e5641a"
+      },
+      "leaflet.css": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css",
+        "sha256": "a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6"
+      },
+      "images/layers.png": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/layers.png",
+        "sha256": "1dbbe9d028e292f36fcba8f8b3a28d5e8932754fc2215b9ac69e4cdecf5107c6"
+      },
+      "images/layers-2x.png": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/layers-2x.png",
+        "sha256": "066daca850d8ffbef007af00b06eac0015728dee279c51f3cb6c716df7c42edf"
+      },
+      "images/marker-icon.png": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon.png",
+        "sha256": "574c3a5cca85f4114085b6841596d62f00d7c892c7b03f28cbfa301deb1dc437"
+      },
+      "images/marker-icon-2x.png": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+        "sha256": "00179c4c1ee830d3a108412ae0d294f55776cfeb085c60129a39aa6fc4ae2528"
+      },
+      "images/marker-shadow.png": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/images/marker-shadow.png",
+        "sha256": "264f5c640339f042dd729062cfc04c17f8ea0f29882b538e3848ed8f10edb4da"
+      },
+      "LICENSE": {
+        "source": "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/LICENSE",
+        "sha256": "53e8dc25862014e4324741ca18fbe3611e11d42ef69f59f86ea8c5389647d4cb"
+      }
+    }
+  }
+}

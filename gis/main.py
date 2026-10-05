@@ -1,47 +1,23 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
-import json
+"""Shared metric geometry and persisted personnel observations."""
+from fastapi import FastAPI, HTTPException
+from common.runtime import configure_api, is_fresh
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pathlib import Path
+from datetime import datetime, timezone
 import os
-from shapely.geometry import Point, shape
+import json
+import math
+import sqlite3
+from contextlib import contextmanager
+from shapely.geometry import Point
+try:
+    from .spatial import load_zones_from_geojson, check_person_in_danger, zone_geojson
+except ImportError:
+    from spatial import load_zones_from_geojson, check_person_in_danger, zone_geojson
 
-app = FastAPI()
-
-# CORS 配置：允许前端跨域调用
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-# ============================================================
-# 数据加载
-# ============================================================
-def load_zones_from_geojson(filepath):
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    zones = []
-    for feature in data["features"]:
-        zones.append({
-            "zone_id": feature["properties"]["zone_id"],
-            "zone_type": feature["properties"]["zone_type"],
-            "risk_level": feature["properties"]["risk_level"],
-            "buffer_radius": feature["properties"].get("buffer_radius", 0.0001),
-            "geometry": shape(feature["geometry"])
-        })
-    return zones
-
-
-zones = load_zones_from_geojson(os.path.join(BASE_DIR, "danger_zones.geojson"))
-
-# 模拟人员数据（与前端 app.js 对齐）
-# P001在基坑Z001内，P002在吊装区Z002内，P004在高空区Z003内
+app = FastAPI(title="空间风险接口")
+configure_api(app)
+zones = load_zones_from_geojson(Path(__file__).with_name("danger_zones.geojson"))
 all_people = [
     {"person_id": "P001", "lng": 120.008, "lat": 30.2945},
     {"person_id": "P002", "lng": 120.0100, "lat": 30.2935},
@@ -49,132 +25,175 @@ all_people = [
     {"person_id": "P004", "lng": 120.008, "lat": 30.2910},
     {"person_id": "P005", "lng": 120.006, "lat": 30.293},
 ]
+DB_PATH = Path(os.environ.get("GIS_DB_PATH", Path(__file__).with_name("data.db")))
 
 
-# ============================================================
-# 核心判断函数（含缓冲区）
-# ============================================================
-def check_person_in_danger(person_id, lng, lat, zones, buffer_distance=0.0001):
-    point = Point(lng, lat)
-
-    for zone in zones:
-        polygon = zone["geometry"]
-
-        # 在危险区内
-        if polygon.contains(point):
-            return {
-                "person_id": person_id,
-                "inside_zone": True,
-                "in_buffer": False,
-                "zone_id": zone["zone_id"],
-                "zone_type": zone["zone_type"],
-                "risk_level": zone["risk_level"],
-                "alert": f"人员{person_id}进入{zone['zone_type']}危险区"
-            }
-
-        # 在缓冲区边缘
-        distance = point.distance(polygon)
-        if distance < buffer_distance:
-            return {
-                "person_id": person_id,
-                "inside_zone": False,
-                "in_buffer": True,
-                "zone_id": zone["zone_id"],
-                "zone_type": zone["zone_type"],
-                "risk_level": zone["risk_level"],
-                "distance_to_boundary": round(distance, 6),
-                "alert": f"人员{person_id}靠近{zone['zone_type']}危险区，请注意"
-            }
-
-    return {
-        "person_id": person_id,
-        "inside_zone": False,
-        "in_buffer": False,
-        "zone_id": None,
-        "zone_type": None,
-        "risk_level": "低",
-        "alert": f"人员{person_id}处于安全区域"
-    }
+@contextmanager
+def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db = sqlite3.connect(DB_PATH, timeout=10)
+    try:
+        with db:
+            yield db
+    finally:
+        db.close()
 
 
-# ============================================================
-# 接口1：单人判断（含缓冲区）
-# ============================================================
+def init_db():
+    with connect() as db:
+        db.execute("CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value INTEGER)")
+        db.execute("BEGIN IMMEDIATE")
+        if not db.execute("SELECT 1 FROM metadata WHERE key='revision'").fetchone():
+            now = datetime.now(timezone.utc).isoformat()
+            db.executemany("INSERT OR IGNORE INTO people VALUES (?,?)", [(p["person_id"],json.dumps({**p,"timestamp":now,"source":"demo"})) for p in all_people])
+            db.execute("INSERT INTO metadata VALUES ('revision',0)")
+
+
+init_db()
+
+
 class PersonLocation(BaseModel):
-    person_id: str
-    lng: float
-    lat: float
+    model_config = ConfigDict(allow_inf_nan=False)
+    person_id: str = Field(min_length=1, max_length=64)
+    lng: float = Field(ge=-180, le=180)
+    lat: float = Field(ge=-90, le=90)
+
+
+class BatchRequest(BaseModel):
+    people: list[PersonLocation] = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_ids(self):
+        ids = [p.person_id for p in self.people]
+        if len(ids) != len(set(ids)):
+            raise ValueError("人员编号不能重复")
+        return self
+
+
+def snapshot():
+    with connect() as db:
+        db.execute("BEGIN")
+        revision = db.execute("SELECT value FROM metadata WHERE key='revision'").fetchone()[0]
+        people = [json.loads(row[0]) for row in db.execute("SELECT payload FROM people ORDER BY id")]
+    return revision, [{**p,"fresh":is_fresh(p),"status":"online" if is_fresh(p) else "stale"} for p in people]
+
+
+def observe(people, source="telemetry"):
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if source.startswith("simulation_"):
+            for p in people:
+                row=db.execute("SELECT payload FROM people WHERE id=?",(p.person_id,)).fetchone()
+                if row and json.loads(row[0]).get("source")=="telemetry":
+                    raise HTTPException(409,"模拟编号已被真实上报占用")
+        db.executemany("INSERT INTO people VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+                       [(p.person_id,json.dumps({**p.model_dump(),"timestamp":now,"source":source})) for p in people])
+        db.execute("UPDATE metadata SET value=value+1 WHERE key='revision'")
+        revision = db.execute("SELECT value FROM metadata WHERE key='revision'").fetchone()[0]
+    return revision
 
 
 @app.post("/check_danger")
 def check_danger(loc: PersonLocation):
-    return check_person_in_danger(loc.person_id, loc.lng, loc.lat, zones)
-
-
-# ============================================================
-# 接口2：多人批量判断
-# ============================================================
-class BatchRequest(BaseModel):
-    people: List[PersonLocation]
+    # Existing clients treat this POST as an observation; keep that contract explicit.
+    revision = observe([loc])
+    return {**check_person_in_danger(loc.person_id,loc.lng,loc.lat,zones), "revision":revision}
 
 
 @app.post("/check_danger_batch")
 def check_danger_batch(req: BatchRequest):
-    results = []
-    for person in req.people:
-        result = check_person_in_danger(person.person_id, person.lng, person.lat, zones)
+    revision = observe(req.people)
+    return {"revision":revision, "results":[check_person_in_danger(p.person_id,p.lng,p.lat,zones) for p in req.people]}
+
+
+@app.post("/check_danger_preview")
+def preview(loc: PersonLocation):
+    return check_person_in_danger(loc.person_id,loc.lng,loc.lat,zones)
+
+
+def summary(people):
+    return [{"zone_id":z["zone_id"],"zone_type":z["zone_type"],"risk_level":z["risk_level"],
+             "people_count":len(ids),"people_list":ids}
+            for z in zones
+            for ids in [[p["person_id"] for p in people if is_fresh(p) and z["geometry"].covers(Point(p["lng"],p["lat"]))]]]
+
+
+def heatmap(people):
+    return [{**z,"risk_score":round(min({"高":0.8,"中":0.5,"低":0.2}.get(z["risk_level"],0.2)+z["people_count"]*0.05,1),2)} for z in summary(people)]
+
+
+@app.get("/people")
+def get_people():
+    revision, people = snapshot()
+    return {"revision":revision,"people":people}
+
+
+@app.get("/state")
+def get_state():
+    revision, people = snapshot()
+    results=[]
+    for p in people:
+        if p["fresh"]:
+            result=check_person_in_danger(p["person_id"],p["lng"],p["lat"],zones)
+        else:
+            result={"person_id":p["person_id"],"risk_level":"未知","inside_zone":False,
+                    "in_buffer":False,"zone_id":None,"matches":[],"alert":"位置超过120秒未更新，仅显示最后已知位置"}
         results.append(result)
-    return {"results": results}
+    return {"revision":revision,"people":people,"heatmap":heatmap(people),"results":results,
+            "total_people":len(people),"fresh_people":sum(p["fresh"] for p in people),
+            "unknown_people":sum(not p["fresh"] for p in people)}
 
 
-# ============================================================
-# 接口3：风险热力图数据
-# ============================================================
-@app.get("/risk_heatmap")
-def risk_heatmap():
-    heatmap_data = []
-    for zone in zones:
-        # 统计该区域内人数
-        people_count = 0
-        for person in all_people:
-            point = Point(person["lng"], person["lat"])
-            if zone["geometry"].contains(point):
-                people_count += 1
-
-        # 风险评分：高风险 + 人数多 = 评分高
-        base_score = {"高": 0.8, "中": 0.5, "低": 0.2}.get(zone["risk_level"], 0.2)
-        score = min(base_score + people_count * 0.05, 1.0)
-
-        heatmap_data.append({
-            "zone_id": zone["zone_id"],
-            "zone_type": zone["zone_type"],
-            "risk_level": zone["risk_level"],
-            "people_count": people_count,
-            "risk_score": round(score, 2)
-        })
-
-    return {"heatmap": heatmap_data}
+@app.post("/simulation/tick")
+def simulate_people():
+    if os.getenv("DEMO_MODE","1") != "1":
+        raise HTTPException(403,"正式数据模式不允许模拟采样")
+    # Refresh demo observations without resetting reported positions.
+    _, people=snapshot()
+    if any(p.get("source") == "telemetry" for p in people):
+        raise HTTPException(409,"含已上报位置，禁止用演示采样刷新其时间；请使用独立演示数据库")
+    revision=observe([PersonLocation(**p) for p in people if p.get('source')=='demo'], source="demo")
+    return {"revision":revision,"source":"demo","state":get_state()}
 
 
-# ============================================================
-# 接口4：区域风险汇总
-# ============================================================
 @app.get("/zone_summary")
 def zone_summary():
-    summary = []
-    for zone in zones:
-        people_inside = []
-        for person in all_people:
-            point = Point(person["lng"], person["lat"])
-            if zone["geometry"].contains(point):
-                people_inside.append(person["person_id"])
+    revision, people = snapshot()
+    return {"revision":revision,"zones":summary(people)}
 
-        summary.append({
-            "zone_id": zone["zone_id"],
-            "zone_type": zone["zone_type"],
-            "risk_level": zone["risk_level"],
-            "people_count": len(people_inside),
-            "people_list": people_inside
-        })
 
-    return {"zones": summary}
+class MotionSample(BaseModel):
+    mode: str = Field(pattern="^(phone|camera)$")
+    step: int = Field(ge=0, le=100000)
+
+
+@app.post("/simulation/motion")
+def simulate_motion(sample: MotionSample):
+    if os.getenv("DEMO_MODE", "1") != "1":
+        raise HTTPException(403, "正式数据模式禁止模拟轨迹")
+    phase=sample.step * 0.025
+    # Separate identities; never overwrite real people or the original demo roster.
+    prefix="SIM-GPS" if sample.mode == "phone" else "SIM-CAM"
+    points=[PersonLocation(person_id=f"{prefix}-{i+1}",
+        lng=120.008+0.0015*math.sin(phase+i*1.8),
+        lat=30.293+0.0013*math.sin(phase*0.7+i*1.8)) for i in range(2)]
+    observe(points, source=f"simulation_{sample.mode}")
+    return {"simulated":True,"mode":sample.mode,"state":get_state()}
+
+
+@app.get("/risk_heatmap")
+def risk_heatmap():
+    revision, people = snapshot()
+    return {"revision":revision,"heatmap":heatmap(people)}
+
+
+@app.get("/zones.geojson")
+def get_zones():
+    return zone_geojson(zones)
+
+
+@app.get("/buffers.geojson")
+def get_buffers():
+    return zone_geojson(zones, buffers=True)
