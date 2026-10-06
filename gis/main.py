@@ -17,6 +17,8 @@ except ImportError:
 
 app = FastAPI(title="空间风险接口")
 configure_api(app)
+from gis.factory import install_factory
+install_factory(app)
 zones = load_zones_from_geojson(Path(__file__).with_name("danger_zones.geojson"))
 all_people = [
     {"person_id": "P001", "lng": 120.00755, "lat": 30.29470},

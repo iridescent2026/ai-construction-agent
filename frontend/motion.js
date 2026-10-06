@@ -1,6 +1,12 @@
 // Synthetic sensor demonstration. No camera stream or GPS permission is accessed.
 (()=>{
  const start=document.getElementById('motion-start'),stop=document.getElementById('motion-stop'),mode=document.getElementById('motion-mode'),text=document.getElementById('motion-status'),canvas=document.getElementById('camera-preview');
+ if(window.FACTORY_WORKBENCH){
+  mode.innerHTML='<option value="overview">总览 · 施工工人 P023</option><option value="vehicle">总览 · 工程车 E-04</option><option value="a">A 区 · 装配工 P005</option><option value="b">B 区 · 电工 P016</option>';canvas.hidden=true;
+  text.textContent='工厂后台移动演示 · 与首页同源，不访问摄像头或 GPS';
+  async function command(action){try{const {factoryRequest}=await import('./factory-client.mjs');const data=await factoryRequest('/demo',{action,key:mode.value});start.disabled=!!data.demo;stop.disabled=!data.demo;text.textContent=data.demo?`${data.demo.id} 后台轨迹运行中 · 首页与 GIS 自动同步`:'已停止后台移动演示';await loadFactory();}catch(error){text.textContent=error.message;}}
+  start.addEventListener('click',()=>command('start'));stop.addEventListener('click',()=>command('stop'));return;
+ }
  const ctx=canvas.getContext('2d');let timer=null,step=0,running=false,busy=false,generation=0;
  function paint(people=[]){
   ctx.fillStyle='#0b1721';ctx.fillRect(0,0,640,250);

@@ -2,6 +2,19 @@
 
 面向施工现场的"安全+进度"协同智能体。
 
+## 工厂数字孪生与卫星影像参考（V7，2026-10-06）
+
+首页直接展示工厂全景、A 区自动化装配车间和 B 区地下动力室。采用机械金属面板、原版 Logo、可调宽左侧功能面板和小型悬浮标识；25 台设备、26 位人员、8 个危险区域共用后台观测，每秒同步，人员或未授权车辆进入危险范围产生报警。
+
+GIS 工作台增加杭州公开厂区的真实卫星影像、厂区平面和遥感参考三维外观；A/B 工区沿用首页的安全演示模型。三维设计、内部工区、业务点位及报警属于演示，未进行现场测绘配准，不能代表该真实企业的监控结果。卫星影像带采集日期和来源，并非实时影像。
+
+- 数字孪生首页：`http://127.0.0.1:8080/`
+- GIS 遥感参考：`http://127.0.0.1:8080/workbench.html`
+- 三处候选厂区与现有模型比对：`http://127.0.0.1:8080/map-reference.html`
+- [场景与交互说明](docs/factory-threeviews.md)、[实时数据接口](docs/factory-realtime.md)、[卫星图选址与来源](docs/satellite-reference.md)
+
+启动方式沿用下文；模型资产、地图组件已随仓库提供。卫星底图需连接官方在线影像服务。验证：59 项后端测试、23 项前端测试通过。
+
 ## 施工场景建模升级（V6，2026-10-06）
 
 完善 GIS 对齐的基坑支护、楼栋脚手架、塔吊、办公区、道路和工程车辆；新增模型点选、俯视总图、楼栋剖切、模型与标牌开关及标签避让。P002 保留在 Z002 内偏离中心的位置。模型高度为演示示意，启动方式沿用下文。验证：49 项后端、10 项前端测试通过。[操作、效果图与建模说明](docs/construction-model-v6.md)。
@@ -52,7 +65,7 @@ python -m venv .venv
 ```powershell
 .venv/Scripts/python -m pip install -r requirements-dev.txt
 .venv/Scripts/python -m pytest -q
-node --test tests/frontend.test.cjs tests/motion.test.cjs tests/scene-model.test.cjs
+node --test tests/*.test.cjs
 ```
 
 详见 [P0修复说明](docs/p0-fixes.md) 与 [当前接口契约](docs/api-p0.md)。

@@ -1,0 +1,48 @@
+{
+  "id": "hangzhou-quanyuan-reference",
+  "name": "杭州泉源五金机械厂",
+  "location": "杭州市钱塘区新湾街道",
+  "center": [
+    120.53575,
+    30.2799
+  ],
+  "bounds": [
+    120.5348,
+    30.2791,
+    120.5367,
+    30.2807
+  ],
+  "coordinateSystem": "WGS84",
+  "surveyed": false,
+  "description": "公开厂区影像参考；人员、设备、危险区和三维建筑均为演示，未与真实厂房配准。",
+  "sources": [
+    {
+      "title": "OpenStreetMap factory footprint",
+      "url": "https://www.openstreetmap.org/way/1201137102",
+      "license": "ODbL-1.0"
+    }
+  ],
+  "imagery": {
+    "provider": "Esri World Imagery",
+    "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "fallbackUrl": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "serviceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer",
+    "attribution": "Esri, Vantor, Earthstar Geographics, GIS User Community",
+    "maxNativeZoom": 18,
+    "metadata": {
+      "acquired": "2025-03-23",
+      "sourceResolution": 0.5,
+      "displayResolution": 0.3,
+      "provider": "Vantor",
+      "sensor": null,
+      "release": null,
+      "minimumLevel": 12,
+      "maximumLevel": 18,
+      "point": [
+        120.53575,
+        30.2799
+      ],
+      "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson"
+    }
+  }
+}

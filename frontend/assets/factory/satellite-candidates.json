@@ -1,0 +1,145 @@
+[
+  {
+    "name": "浙江百强工业园区",
+    "location": "杭州萧山义桥",
+    "note": "多栋建筑与空地，园区组织较接近；主厂房为不规则组合形。",
+    "polygon": [
+      [
+        120.2054432,
+        30.0792202
+      ],
+      [
+        120.2053486,
+        30.0785862
+      ],
+      [
+        120.2055377,
+        30.0781261
+      ],
+      [
+        120.2061403,
+        30.0781159
+      ],
+      [
+        120.2069084,
+        30.0786374
+      ],
+      [
+        120.2078892,
+        30.0787498
+      ],
+      [
+        120.2078538,
+        30.0791895
+      ],
+      [
+        120.2054432,
+        30.0792202
+      ]
+    ],
+    "bounds": [
+      120.2053486,
+      30.0781159,
+      120.2078892,
+      30.0792202
+    ],
+    "center": [
+      120.2066189,
+      30.07866805
+    ],
+    "sourceUrl": "https://www.openstreetmap.org/way/1098282575",
+    "metadataUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.2066189%2C30.07866805&geometryType=esriGeometryPoint&inSR=4326&outFields=%2A&returnGeometry=false&f=json",
+    "acquired": "2025-04-11",
+    "resolution": 0.34
+  },
+  {
+    "name": "杭州泉源五金机械厂",
+    "location": "杭州钱塘新湾",
+    "note": "规整主厂房、附属建筑与院落，尺度紧凑；主厂房占地比例更大。",
+    "polygon": [
+      [
+        120.5356216,
+        30.2804381
+      ],
+      [
+        120.5351261,
+        30.2797713
+      ],
+      [
+        120.5354487,
+        30.2796202
+      ],
+      [
+        120.5353766,
+        30.2795333
+      ],
+      [
+        120.5357903,
+        30.2793499
+      ],
+      [
+        120.5363771,
+        30.2801031
+      ],
+      [
+        120.5356216,
+        30.2804381
+      ]
+    ],
+    "bounds": [
+      120.5351261,
+      30.2793499,
+      120.5363771,
+      30.2804381
+    ],
+    "center": [
+      120.5357516,
+      30.279894
+    ],
+    "sourceUrl": "https://www.openstreetmap.org/way/1201137102",
+    "metadataUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.5357516%2C30.279894&geometryType=esriGeometryPoint&inSR=4326&outFields=%2A&returnGeometry=false&f=json",
+    "acquired": "2025-03-23",
+    "resolution": 0.5
+  },
+  {
+    "name": "杭州兴达机械有限公司北厂区",
+    "location": "杭州钱塘新湾",
+    "note": "矩形工业地块，比较厂房和附属建筑；公开地图名称。",
+    "polygon": [
+      [
+        120.5355948,
+        30.2792909
+      ],
+      [
+        120.5351381,
+        30.278683
+      ],
+      [
+        120.5356234,
+        30.2785236
+      ],
+      [
+        120.5360566,
+        30.2791317
+      ],
+      [
+        120.5355948,
+        30.2792909
+      ]
+    ],
+    "bounds": [
+      120.5351381,
+      30.2785236,
+      120.5360566,
+      30.2792909
+    ],
+    "center": [
+      120.53559734999999,
+      30.27890725
+    ],
+    "sourceUrl": "https://www.openstreetmap.org/way/1201137101",
+    "metadataUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53559734999999%2C30.27890725&geometryType=esriGeometryPoint&inSR=4326&outFields=%2A&returnGeometry=false&f=json",
+    "acquired": "2025-03-23",
+    "resolution": 0.5
+  }
+]

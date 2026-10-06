@@ -1,0 +1,19 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>相似园区卫星图 · 工安智瞳</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<style>body{margin:0;background:#17232a;color:#ebeee9;font:14px 'Microsoft Yahei',sans-serif}header{padding:22px 24px;border-bottom:1px solid #788883;background:#253239}h1{font-size:24px;margin:0 0 10px}header p{margin:4px 0;color:#c2cdcb}.maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:20px}section{min-width:0;border:1px solid #8b9c99;border-radius:3px;background:#223038;overflow:hidden}h2{margin:14px;font-size:18px}.map,.model{height:380px}.model{background:#20343e;display:flex;align-items:center}.model img{width:100%;height:100%;object-fit:contain}p{padding:0 14px;line-height:1.7;color:#becbc7}small{display:block;padding:0 14px 8px;color:#c9b886}a{color:#d9c187}footer{padding:15px 24px;border-top:1px solid #62706c;color:#a9b8b5}.leaflet-control-attribution{font-size:9px}.leaflet-container{background:#1d2930}.leaflet-tooltip{background:#203238;color:#fff;border:1px solid #dac07f}.status{color:#9cd3bd;padding:0 14px 12px}@media(max-width:750px){.maps{grid-template-columns:1fr}.map{height:400px}}</style></head><body>
+<header><h1>与现有 3D 场景相近的真实工业厂区</h1><p>比对主厂房、附属建筑、院落和道路。金色虚线为 OpenStreetMap 公开工业地块。</p><p>这些是卫星影像参考；现有三维场景为通用设计，施工坑、吊装设备及人员不代表真实厂区现状。</p></header>
+<main class="maps"><section><h2>现有 3D 总览 · 布局参考</h2><div class="model"><img src="assets/factory/model-reference.png" alt="现有3D总览，包含主厂房、三栋配套建筑、作业院落和环路"></div><p>一栋主厂房 + 三栋配套建筑 + 土方和吊装作业区 + 外围道路。</p><small>设计示意 · 未经过现场测绘</small></section></main>
+<footer>影像 © Esri, Vantor, Earthstar Geographics, GIS User Community · 厂区轮廓 © OpenStreetMap contributors / ODbL。影像采集时间来自服务元数据，并非实时画面。<a href="./">返回数字孪生首页 ↗</a></footer>
+<script src="vendor/leaflet/leaflet.js"></script><script>
+fetch('assets/factory/satellite-candidates.json').then(r=>r.json()).then(sites=>{for(const [index,site] of sites.entries()){
+ const section=document.createElement('section'),heading=document.createElement('h2'),canvas=document.createElement('div'),description=document.createElement('p'),source=document.createElement('small'),status=document.createElement('div');
+ heading.textContent=`${index+1}. ${site.name}`;canvas.className='map';canvas.id='candidate-'+index;description.textContent=site.location+' · '+site.note;source.append(`影像采集 ${site.acquired||'日期未核实'}${site.resolution?' · 源分辨率 '+site.resolution+' m':''} · `);
+ for(const [label,url] of [['厂区位置',site.sourceUrl],['影像元数据',site.metadataUrl]]){const a=document.createElement('a');a.textContent=label+' ↗ ';a.href=url;a.target='_blank';a.rel='noopener';source.append(a);}
+ status.className='status';status.textContent='正在载入官方影像…';section.append(heading,canvas,description,source,status);document.querySelector('main').append(section);
+ const map=L.map(canvas).fitBounds([[site.bounds[1],site.bounds[0]],[site.bounds[3],site.bounds[2]]],{padding:[24,24],maxZoom:19});L.control.scale({imperial:false}).addTo(map);
+ const base=L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:18,attribution:'Imagery © Esri, Vantor, Earthstar Geographics, GIS User Community'}).addTo(map);
+ base.on('tileload',()=>{status.textContent='真实卫星影像已载入 · 可拖动 / 缩放';});base.on('tileerror',()=>{status.textContent='部分影像未载入，请重新打开本页';});
+ L.polygon(site.polygon.map(([lng,lat])=>[lat,lng]),{color:'#e9c483',weight:2,fillOpacity:0,dashArray:'6 4',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ODbL'}).addTo(map).bindTooltip(site.name+' · 公开地块');
+ new ResizeObserver(()=>map.invalidateSize()).observe(canvas);
+}}).catch(()=>{document.querySelector('main').append('厂区参考记录载入失败，请重新打开本页。');});
+</script></body></html>

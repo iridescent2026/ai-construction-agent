@@ -61,6 +61,12 @@ test('single response drives maps/cards; route response uses original request co
     vm.runInContext(fs.readFileSync(path.join(__dirname,'../frontend/app.js'),'utf8'),context);
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(groups[1].children.length,2);
+    vm.runInContext(`showDetail({title:'D001',text:'selected'});previewDetailFor({title:'P001',text:'hover'});`,context);
+    assert.match(node('detail-content').innerHTML,/P001/);assert.equal(node('scene-detail').hidden,false);
+    vm.runInContext('previewDetailFor(null)',context);assert.match(node('detail-content').innerHTML,/D001/);
+    node('close-detail').click();assert.equal(node('scene-detail').hidden,true);
+    vm.runInContext(`previewDetailFor({title:'<P002>',text:'<hover>'});previewDetailFor(null);`,context);
+    assert.equal(node('scene-detail').hidden,true);assert.match(node('detail-content').innerHTML,/&lt;P002&gt;/);
     assert.match(node('device-list').innerHTML,/42℃/);
     assert.ok(groups[1].children.every(marker=>marker.popup.includes('42℃')));
     assert.ok(calls.every(c=>!c.options.method || c.options.method==='GET'));

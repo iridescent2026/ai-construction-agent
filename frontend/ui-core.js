@@ -8,6 +8,7 @@
         return Number.isFinite(age) && age>=0 && age<=120000;
     }
     function deviceState(d,now) {
+        if(d.factory){if(!fresh(d,now)||d.status!=='online')return {level:'未知',label:'观测过期',color:colors['未知']};const level=d.riskState==='danger'?'高':d.riskState==='unknown'?'未知':'低';return {level,label:level==='高'?'区域进入报警':d.source==='telemetry'?'接口观测 · 阈值待配置':'演示监测 · 阈值待配置',color:colors[level]};}
         const valid=['load','temperature','leakage','risk_score'].every(k=>typeof d[k]==='number' && Number.isFinite(d[k]));
         if(!valid || typeof d.alert!=='string' || !d.alert || !fresh(d,now) || d.status!=='online' || !['高','中','低'].includes(d.risk_level)) return {level:'未知',label:'状态未知',color:colors['未知']};
         const level=d.hard_alert?'高':d.risk_level;

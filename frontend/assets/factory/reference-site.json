@@ -1,0 +1,71 @@
+{
+  "id": "hangzhou-quanyuan-reference",
+  "name": "杭州泉源五金机械厂",
+  "origin": [
+    120.53575,
+    30.2799
+  ],
+  "bounds": [
+    120.5348,
+    30.2791,
+    120.5367,
+    30.2807
+  ],
+  "sourceUrl": "https://www.openstreetmap.org/way/1201137102",
+  "surveyed": false,
+  "description": "选择杭州泉源五金机械厂作为公开外部参考：厂区边界与周边道路来自 OpenStreetMap；4 处屋顶投影、厂内通道、入口候选及空地按 2025-03-23 卫星影像近似描绘。高度 4 / 10 m 为演示假设。A/B 工区、设备、人员和危险区沿用现有安全演示配置，按示意变换安置。",
+  "imagery": {
+    "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "fallbackUrl": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    "date": "2025-03-23",
+    "resolution": 0.5,
+    "accuracy": 8.47,
+    "provider": "Esri / Vantor",
+    "maxNativeZoom": 18,
+    "metadataUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson"
+  },
+  "frames": {
+    "overview": {
+      "translation": [
+        -20.647,
+        40.856
+      ],
+      "scale": 0.12,
+      "rotation": 0.44,
+      "basis": "demo"
+    },
+    "a": {
+      "translation": [
+        -22.195,
+        -11.745
+      ],
+      "scale": 0.64,
+      "rotation": 2.12,
+      "basis": "demo"
+    },
+    "b": {
+      "translation": [
+        14.42,
+        5.272
+      ],
+      "scale": 0.7,
+      "rotation": 2.12,
+      "basis": "demo"
+    }
+  },
+  "traceEvidence": {
+    "file": "docs/images/reference-site.png",
+    "zoom": 18,
+    "tile": [
+      218843,
+      107918
+    ],
+    "tilePageTopLeft": [
+      668.666687,
+      533.333374
+    ],
+    "horizontalAccuracyMeters": 8.47,
+    "date": "2026-10-06",
+    "method": "Manual approximate roof projection from official imagery. No survey or real indoor data."
+  }
+}

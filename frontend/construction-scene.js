@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from './vendor/three/OrbitControls.js';
 import {buildLandscape} from './construction-model.js';
 import {worldPoint,ringsOf,zoneBounds,surfaceHeight,placeLabels} from './scene-layout.mjs';
+import {SceneMarkers} from './scene-markers.mjs';
 
 function disposeGroup(group) {
     const geometries=new Set(),materials=new Set(),textures=new Set();
@@ -10,7 +11,7 @@ function disposeGroup(group) {
 }
 
 export class SiteScene {
-    constructor(container,onSelect) {
+    constructor(container,onSelect,onPreview) {
         this.container=container;this.onSelect=onSelect;this.visible=false;this.disposed=false;this.labels=[];this.modelVisible=true;this.namesVisible=true;this.cutaway=false;
         this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#192933');this.scene.fog=new THREE.Fog('#192933',1300,2300);
         this.camera=new THREE.PerspectiveCamera(43,1,1,3500);
@@ -24,9 +25,9 @@ export class SiteScene {
         this.sun=new THREE.DirectionalLight(0xffe3bd,3.1);this.sun.position.set(-280,540,260);this.sun.castShadow=true;
         this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-440,right:440,top:440,bottom:-440,near:1,far:1100});this.sun.shadow.bias=-.00025;this.sun.shadow.normalBias=.5;this.scene.add(this.sun);
         this.root=new THREE.Group();this.scene.add(this.root);this.landscape=null;this.landscapeKey=null;this.pickable=[];
-        this.labelLayer=document.createElement('div');this.labelLayer.className='scene-labels';container.appendChild(this.labelLayer);
+        this.markers=new SceneMarkers(container,info=>this.select(info),onPreview);
         this.toolbar=document.createElement('div');this.toolbar.className='model-toolbar';this.toolbar.setAttribute('aria-label','施工模型工具');
-        this.toolbar.innerHTML='<button type="button" data-model-action="top">俯视总图</button><button type="button" data-model-action="cut" aria-pressed="false">楼栋剖切</button><button type="button" data-model-action="models" aria-pressed="true">施工模型</button><button type="button" data-model-action="names" aria-pressed="true">模型标牌</button>';
+        this.toolbar.innerHTML='<button type="button" data-model-action="top">俯视总图</button><button type="button" data-model-action="cut" aria-pressed="false">楼栋剖切</button><button type="button" data-model-action="models" aria-pressed="true">施工模型</button><button type="button" data-model-action="names" aria-pressed="true">建筑图标</button>';
         container.appendChild(this.toolbar);
         this.toolbar.addEventListener('click',e=>{const b=e.target.closest('[data-model-action]');if(!b)return;
             switch(b.dataset.modelAction){
@@ -57,22 +58,22 @@ export class SiteScene {
     select(info){this.selectedId=info.id;this.onSelect(info);if(info.kind==='model'&&info.anchor){const [x,y,z]=info.anchor;this.controls.target.set(x,y*.45,z);this.camera.position.set(x+160,y+190,z+210);this.controls.update();}}
     reset(){this.controls.target.set(0,10,0);this.camera.position.set(500,560,630);this.controls.update();}
     resize(){const w=this.container.clientWidth,h=this.container.clientHeight;if(!w||!h)return;this.camera.aspect=w/h;this.camera.updateProjectionMatrix();this.renderer.setSize(w,h,false);}
-    setVisible(value){this.visible=value;if(value)this.resize();}
+    setVisible(value){this.visible=value;if(value)this.resize();else this.markers.clearPreview();}
     animate(){if(this.disposed)return;this.frame=requestAnimationFrame(this.animate);if(!this.visible)return;this.controls.update();this.renderer.render(this.scene,this.camera);this.layoutLabels();}
     layoutLabels(){
         const w=this.container.clientWidth,h=this.container.clientHeight;
-        const items=this.labels.map(l=>{const p=l.anchor.clone().project(this.camera);return {id:l.id,x:(p.x+1)*w/2,y:(1-p.y)*h/2,width:l.width,height:23,priority:l.priority+(l.info.id===this.selectedId?5:0),visible:p.z>-1&&p.z<1&&(l.info.kind!=='model'||this.namesVisible&&this.modelVisible)};});
+        const items=this.labels.map(l=>{const p=l.anchor.clone().project(this.camera);return {id:l.id,x:(p.x+1)*w/2,y:(1-p.y)*h/2,width:22,height:22,priority:l.priority+(l.info.id===this.selectedId?5:0),visible:p.z>-1&&p.z<1&&(l.info.kind!=='model'||this.namesVisible&&this.modelVisible)};});
         const places=placeLabels(items,w,h,70,54);
-        this.labels.forEach(l=>{const p=places.get(l.id);l.node.hidden=!p;if(p)l.node.style.transform=`translate(${p.x}px,${p.y}px)`;});
+        this.markers.layout(places,w,h);
     }
     label(text,anchor,info,priority,color){
-        const node=document.createElement('button');node.type='button';node.className='model-label '+info.kind;node.textContent=text;node.style.setProperty('--label-color',color||'#bfd3d3');node.setAttribute('aria-label',`查看${text}`);node.addEventListener('click',()=>this.select(info));
-        this.labelLayer.appendChild(node);this.labels.push({id:info.kind+':'+info.id,node,anchor:new THREE.Vector3(...anchor),info,priority,width:Math.min(145,Math.max(55,text.length*12+20))});
+        const id=info.kind+':'+info.id;this.markers.set(id,text,info,color);
+        this.labels.push({id,anchor:new THREE.Vector3(...anchor),info,priority});
     }
     outline(ring,color,y=.25,dashed=false){const points=ring.map(([lng,lat])=>{const [x,z]=worldPoint(lng,lat);return new THREE.Vector3(x,y,z);});const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(points),dashed?new THREE.LineDashedMaterial({color,dashSize:4,gapSize:3}):new THREE.LineBasicMaterial({color}));line.computeLineDistances();this.root.add(line);}
     addMesh(parent,geometry,color,position){const m=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color,roughness:.65}));m.position.set(...position);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
     worker(p,status,y){
-        const [x,z]=worldPoint(p.lng,p.lat),group=new THREE.Group();group.position.set(x,y,z);
+        const [x,z]=worldPoint(p.lng,p.lat),group=new THREE.Group();group.position.set(x,y,z);group.scale.setScalar(1.35);
         group.userData={kind:'person',id:p.person_id,title:p.person_id,text:`人员 · ${status.label}。采集：${p.timestamp}。模型高度仅为展示示意。`};
         const boot=0x26343c,vest=status.level==='未知'?0x879099:0xf0a947;
         for(const dx of [-.9,.9]){this.addMesh(group,new THREE.BoxGeometry(1.1,2.7,1.3),0x426379,[dx,2.3,0]);this.addMesh(group,new THREE.BoxGeometry(1.4,.8,2.2),boot,[dx,.5,.4]);}
@@ -82,10 +83,10 @@ export class SiteScene {
         this.addMesh(group,new THREE.SphereGeometry(1,10,8),0xc39777,[0,7.3,0]);
         this.addMesh(group,new THREE.SphereGeometry(1.25,12,8,0,Math.PI*2,0,Math.PI/2),0xffc65b,[0,7.5,0]);this.addMesh(group,new THREE.CylinderGeometry(1.45,1.45,.2,12),0xffc65b,[0,7.5,0]);
         const ring=new THREE.Mesh(new THREE.RingGeometry(2.7,3.3,20),new THREE.MeshBasicMaterial({color:status.color,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.16;group.add(ring);
-        this.root.add(group);this.pickable.push(group);this.label(p.person_id,[x,y+10,z],group.userData,3,status.color);
+        this.root.add(group);this.pickable.push(group);this.label(p.person_id,[x,y+13.5,z],group.userData,3,status.color);
     }
     device(d,status,y){
-        const [x,z]=worldPoint(...d.location),group=new THREE.Group();group.position.set(x,y,z);group.userData={kind:'device',id:d.device_id,title:`${d.device_id} ${d.device_type}`,text:`${status.label} · ${d.alert}。负荷${d.load}% / 温度${d.temperature}℃ / 漏电${d.leakage}mA`};
+        const [x,z]=worldPoint(...d.location),group=new THREE.Group(),scale=d.device_type==='配电箱'?1.3:1;group.position.set(x,y,z);group.scale.setScalar(scale);group.userData={kind:'device',id:d.device_id,title:`${d.device_id} ${d.device_type}`,text:`${status.label} · ${d.alert}。负荷${d.load}% / 温度${d.temperature}℃ / 漏电${d.leakage}mA`};
         if(d.device_type==='电缆'){
             const spool=this.addMesh(group,new THREE.CylinderGeometry(2.3,2.3,4.5,12),0x3c4f5d,[0,3,0]);spool.rotation.z=Math.PI/2;
             for(const dx of [-2.4,2.4]){const end=this.addMesh(group,new THREE.CylinderGeometry(3,3,.45,12),0xa58b5f,[dx,3,0]);end.rotation.z=Math.PI/2;}
@@ -97,10 +98,10 @@ export class SiteScene {
             this.addMesh(group,new THREE.SphereGeometry(.5,8,6),status.color,[1.3,6.2,2]);
         }
         const ring=new THREE.Mesh(new THREE.RingGeometry(3.4,4,20),new THREE.MeshBasicMaterial({color:status.color,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.14;group.add(ring);
-        this.root.add(group);this.pickable.push(group);this.label(d.device_id,[x,y+10,z],group.userData,2,status.color);
+        this.root.add(group);this.pickable.push(group);this.label(d.device_id,[x,y+10*scale,z],group.userData,2,status.color);
     }
     update(data){
-        this.data=data;disposeGroup(this.root);this.pickable=[];this.labels=[];this.labelLayer.replaceChildren();
+        this.data=data;disposeGroup(this.root);this.pickable=[];this.labels=[];this.markers.begin();
         const features=data.zones?.features||[],key=JSON.stringify(features);
         if(key!==this.landscapeKey){if(this.landscape){this.scene.remove(this.landscape);disposeGroup(this.landscape);}this.landscape=buildLandscape(features);this.landscapeKey=key;this.landscape.visible=this.modelVisible;this.scene.add(this.landscape);this.applyCutaway();}
         for(const part of this.landscape.userData.parts){if(['yard','perimeter','site-services'].includes(part.userData.id))continue;this.label(part.userData.title,part.userData.anchor,part.userData,0,'#b9d1d0');}
@@ -119,8 +120,8 @@ export class SiteScene {
         for(const p of data.visibility?.people===false?[]:data.spatial?.people||[])this.worker(p,personState(p,results.get(p.person_id)),surfaceHeight(p.lng,p.lat,features));
         for(const d of data.visibility?.devices===false?[]:data.devices||[])this.device(d,deviceState(d),surfaceHeight(...d.location,features));
         if(data.visibility?.route!==false&&data.route?.length>1)this.outline(data.route,0xb994ff,.5,true);
-        this.renderer.shadowMap.needsUpdate=true;this.layoutLabels();
+        this.markers.end();this.renderer.shadowMap.needsUpdate=true;this.layoutLabels();
     }
     focus(lng,lat){const [x,z]=worldPoint(lng,lat),y=surfaceHeight(lng,lat,this.data?.zones?.features);this.controls.target.set(x,y+3,z);this.camera.position.set(x+125,y+160,z+190);this.controls.update();}
-    dispose(){this.disposed=true;cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();this.controls.dispose();disposeGroup(this.root);if(this.landscape)disposeGroup(this.landscape);this.sun.shadow.map?.dispose();this.renderer.dispose();this.renderer.domElement.remove();this.labelLayer.remove();this.toolbar.remove();this.modelNote.remove();}
+    dispose(){this.disposed=true;cancelAnimationFrame(this.frame);this.resizeObserver.disconnect();this.controls.dispose();disposeGroup(this.root);if(this.landscape)disposeGroup(this.landscape);this.sun.shadow.map?.dispose();this.renderer.dispose();this.renderer.domElement.remove();this.markers.dispose();this.toolbar.remove();this.modelNote.remove();}
 }
