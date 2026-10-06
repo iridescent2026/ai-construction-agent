@@ -46,7 +46,7 @@ async function setMode(mode){
     if(mode==='3d'){
         try{
             if(!scene){
-                if(!sceneLoading)sceneLoading=import('./scene3d.js?v=3').then(({SiteScene})=>{scene=new SiteScene($('scene3d'),showDetail);scene.update(state);return scene;});
+                if(!sceneLoading)sceneLoading=import('./construction-scene.js?v=6').then(({SiteScene})=>{scene=new SiteScene($('scene3d'),showDetail);scene.update(state);return scene;});
                 await sceneLoading;
             }
         }catch(error){sceneLoading=null;notice('当前设备无法启动 3D，已保留二维视图。可刷新后重试。');return;}
@@ -56,7 +56,7 @@ async function setMode(mode){
     $('view-2d').classList.toggle('active',mode==='2d');$('view-3d').classList.toggle('active',mode==='3d');
     $('view-2d').setAttribute('aria-pressed',mode==='2d');$('view-3d').setAttribute('aria-pressed',mode==='3d');
     $('basemap').hidden=mode==='3d';$('compass').hidden=mode==='3d';
-    $('view-note').textContent=mode==='3d'?'拖动旋转 · 滚轮缩放 · 右键平移 · 点击对象查看':'圆点为人员，方块为设备；点击对象可查看详情。';
+    $('view-note').textContent=mode==='3d'?'拖动旋转 · 滚轮缩放 · 点击模型、人员或标牌查看':'圆点为人员，方块为设备；点击对象可查看详情。';
     $('view-help').textContent=mode==='3d'?'3D 为空间关系示意；建筑、塔吊及人员模型均为设计示意，非现场实测。两种视图共享同一观测数据。':'坐标与业务图层可离线查看。卫星影像需要联网。';
     scene?.setVisible(mode==='3d');if(mode==='2d')map.invalidateSize();
 }

@@ -1,0 +1,14 @@
+#scene3d{overflow:hidden}
+#scene3d>canvas{display:block;width:100%;height:100%;touch-action:none}
+.model-toolbar{position:absolute;top:38px;left:12px;right:12px;z-index:12;display:flex;gap:5px;flex-wrap:wrap;pointer-events:none}
+.model-toolbar button{pointer-events:auto;padding:5px 8px;font-size:11px;color:#d8e3e1;background:#18292eea;border:1px solid #58716f;border-radius:4px;box-shadow:0 2px 5px #0004;min-height:28px}
+.model-toolbar button[aria-pressed=true]{color:#ffe0a2;border-color:#ad8c48;background:#3d382beb}
+.scene-labels{position:absolute;inset:0;z-index:9;pointer-events:none;overflow:hidden}
+.model-label{position:absolute;top:0;left:0;pointer-events:auto;max-width:145px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 7px;height:23px;line-height:15px;font:600 11px/15px 'Microsoft YaHei',sans-serif;border:1px solid #647e8380;border-left:3px solid var(--label-color);border-radius:3px;background:#172a32e8;color:#f0f4ed;box-shadow:0 2px 6px #0004;cursor:pointer}
+.model-label.model{color:#bfd1ce;background:#213637df;font-weight:400;font-size:10px}
+.model-label.person{background:#342f26ee;border-color:#968266;color:#ffe8b8}
+.model-label.zone{font-size:10px;color:var(--label-color);background:#18252fef}
+.model-label[hidden]{display:none!important}
+.model-label:hover{background:#45605c;color:white;border-color:#e2c37e}
+.model-note{position:absolute;bottom:12px;right:12px;max-width:60%;z-index:8;color:#b8cbc9;font-size:10px;line-height:1.5;background:#18282ccd;padding:4px 7px;border-radius:3px;pointer-events:none}
+@media(max-width:600px){.model-toolbar{gap:3px;top:38px}.model-toolbar button{font-size:10px;padding:4px 5px}.model-note{font-size:9px;max-width:53%}}

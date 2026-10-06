@@ -2,6 +2,10 @@
 
 面向施工现场的"安全+进度"协同智能体。
 
+## 施工场景建模升级（V6，2026-10-06）
+
+完善 GIS 对齐的基坑支护、楼栋脚手架、塔吊、办公区、道路和工程车辆；新增模型点选、俯视总图、楼栋剖切、模型与标牌开关及标签避让。P002 保留在 Z002 内偏离中心的位置。模型高度为演示示意，启动方式沿用下文。验证：49 项后端、10 项前端测试通过。[操作、效果图与建模说明](docs/construction-model-v6.md)。
+
 ## 重工业管理工作台（V5）
 
 新增上下滚动管理区、设备监测表、人员管理表、重型钢框螺钉和工地背景。[操作与验收](docs/heavy-steel-v5.md)。
@@ -48,7 +52,7 @@ python -m venv .venv
 ```powershell
 .venv/Scripts/python -m pip install -r requirements-dev.txt
 .venv/Scripts/python -m pytest -q
-node --test tests/frontend.test.cjs
+node --test tests/frontend.test.cjs tests/motion.test.cjs tests/scene-model.test.cjs
 ```
 
 详见 [P0修复说明](docs/p0-fixes.md) 与 [当前接口契约](docs/api-p0.md)。
