@@ -19,7 +19,7 @@ app = FastAPI(title="空间风险接口")
 configure_api(app)
 zones = load_zones_from_geojson(Path(__file__).with_name("danger_zones.geojson"))
 all_people = [
-    {"person_id": "P001", "lng": 120.008, "lat": 30.2945},
+    {"person_id": "P001", "lng": 120.00755, "lat": 30.29470},
     {"person_id": "P002", "lng": 120.0100, "lat": 30.2935},
     {"person_id": "P003", "lng": 120.011, "lat": 30.292},
     {"person_id": "P004", "lng": 120.008, "lat": 30.2910},
