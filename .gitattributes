@@ -1,2 +1,4 @@
+frontend/vendor/** -text
+*.png binary
 # Keep downloaded glTF bytes identical to the asset provenance hashes.
 frontend/assets/factory/*.gltf -text
