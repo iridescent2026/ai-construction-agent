@@ -78,6 +78,21 @@ class FactoryStore:
             db.execute('CREATE TABLE IF NOT EXISTS factory_state (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
             row = db.execute('SELECT payload FROM factory_state WHERE id=1').fetchone()
         self.data = json.loads(row[0]) if row else {'revision':0,'entities':copy.deepcopy(CATALOG['entities']),'events':[],'active':[],'sequence':0,'demo':None}
+        if self.data.get('catalogRevision') != CATALOG.get('catalogRevision', 1):
+            previous = {entity['id']: entity for entity in self.data['entities']}
+            revised = copy.deepcopy(CATALOG['entities'])
+            for entity in revised:
+                observed = previous.get(entity['id'], {})
+                for key in ['riskState', 'currentZones', 'positionSource', 'positionTimestamp',
+                            'measurements', 'measurementSource', 'measurementTimestamp']:
+                    if key in observed:
+                        entity[key] = copy.deepcopy(observed[key])
+                # A layout update may relocate demo actors, but never overwrites
+                # an externally reported position or measurement.
+                if observed.get('positionSource') == 'telemetry':
+                    entity['anchor'] = copy.deepcopy(observed['anchor'])
+            self.data['entities'] = revised
+            self.data['catalogRevision'] = CATALOG.get('catalogRevision', 1)
         self.data['demo'] = None
         self.started = time.monotonic()
         self.tick()
@@ -123,7 +138,7 @@ class FactoryStore:
                         e['positionTimestamp']=timestamp
                 if e['kind']=='device' and e.get('measurementSource')!='telemetry':
                     value=round(35+3*math.sin(seconds/8+index),1)
-                    if any(word in e['title'] for word in ['泵','阀门','储气','压力']):
+                    if any(word in e['title'] for word in ['泵','阀门','储气','压力','换热','压缩','过滤']):
                         measurements={'pressure':{'value':round(.48+.04*math.sin(seconds/7+index),3),'unit':'MPa'},'temperature':{'value':value,'unit':'℃'}}
                     elif '10kV' in e['title'] or '变压器' in e['title']:
                         measurements={'voltage':{'value':round(10+.02*math.sin(seconds/8),2),'unit':'kV'},'temperature':{'value':value,'unit':'℃'}}

@@ -13,7 +13,7 @@
   ],
   "sourceUrl": "https://www.openstreetmap.org/way/1201137102",
   "surveyed": false,
-  "description": "选择杭州泉源五金机械厂作为公开外部参考：厂区边界与周边道路来自 OpenStreetMap；4 处屋顶投影、厂内通道、入口候选及空地按 2025-03-23 卫星影像近似描绘。高度 4 / 10 m 为演示假设。A/B 工区、设备、人员和危险区沿用现有安全演示配置，按示意变换安置。",
+  "description": "选择杭州泉源五金机械厂作为公开外部参考：厂区边界与周边道路来自 OpenStreetMap；4 处屋顶投影、厂内通道、入口候选及空地按 2025-03-23 卫星影像近似描绘。高度 4 / 10 m 为演示假设。A/B 工区按西侧装配厂房与东侧动力厂房（含控制侧翼）的轮廓布置，与整体剖面保持一致；工艺、设备、人员与危险区仍为安全演示配置。",
   "imagery": {
     "url": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     "fallbackUrl": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",

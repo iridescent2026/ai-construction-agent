@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const areaName=view=>({overview:'全景 · 室外施工',a:'A · 自动化装配',b:'B · 地下动力'}[view]);
+const areaName=view=>({overview:'全景 · 室外施工',a:'A · 自动化装配',b:'B · 动力设备'}[view]);
 let catalog=[],selected='',snapshot={active:[],events:[]},safetyKey='';
 function cell(text){const td=document.createElement('td');td.textContent=text;return td;}
 function row(info,values,statusIndex=-1){

@@ -10,7 +10,7 @@ test('GIS transforms each work area consistently and preserves its equipment wit
         const feature=adapted.zones.features.find(f=>f.properties.zone_id===zone.id),ring=feature.geometry.coordinates[0];
         for(const id of zone.devices){const device=data.entities.find(e=>e.id===id),point=geoPoint(data,device.view,device.anchor[0],device.anchor[2]);assert.ok(point[0]>=Math.min(...ring.map(p=>p[0]))&&point[0]<=Math.max(...ring.map(p=>p[0])));assert.ok(point[1]>=Math.min(...ring.map(p=>p[1]))&&point[1]<=Math.max(...ring.map(p=>p[1])));}
     }
-    assert.equal(adapted.devices.length,25);assert.equal(adapted.spatial.people.length,26);assert.equal(adapted.zones.features.length,8);assert.equal(adapted.snapshot_id,'42');
+    assert.equal(adapted.devices.length,30);assert.equal(adapted.spatial.people.length,26);assert.equal(adapted.zones.features.length,12);assert.equal(adapted.snapshot_id,'42');
 });
 
 test('pressure telemetry keeps its source and units without fabricated electrical readings',async()=>{

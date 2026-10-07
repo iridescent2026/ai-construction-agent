@@ -22,14 +22,35 @@ def observe(store, **kwargs):
 
 def test_shared_catalogue_and_read_only_snapshot(store):
     data=store.snapshot()
-    assert len([e for e in data['entities'] if e['kind']=='device'])==25
+    assert len([e for e in data['entities'] if e['kind']=='device'])==30
     assert len([e for e in data['entities'] if e['kind']=='person'])==26
-    assert len([e for e in data['entities'] if e['kind']=='zone'])==8
+    assert len([e for e in data['entities'] if e['kind']=='zone'])==12
     assert len(data['active'])==6
     assert store.snapshot()==data
     saved=FactoryStore(store.path).snapshot()
     assert saved['revision']>data['revision']
     assert len(saved['active'])==6
+
+
+def test_layout_migration_updates_demo_positions_but_preserves_telemetry(store):
+    import sqlite3
+    from gis.factory import CATALOG
+    observe(store, id='P014', x=-30, z=-15)
+    observe(store, id='B-03', measurements={'pressure':{'value':.62,'unit':'MPa'}})
+    store.data['catalogRevision']=1
+    next(e for e in store.data['entities'] if e['id']=='P020')['anchor']=[17,2.7,11]
+    next(e for e in store.data['entities'] if e['id']=='Z005')['center']=[-12.5,-9]
+    with sqlite3.connect(store.path) as db:
+        db.execute('UPDATE factory_state SET payload=? WHERE id=1', (json.dumps(store.data),))
+    migrated=FactoryStore(store.path).snapshot()
+    by_id={e['id']:e for e in migrated['entities']}
+    canonical={e['id']:e for e in CATALOG['entities']}
+    assert migrated['catalogRevision']==CATALOG['catalogRevision']
+    assert by_id['P014']['anchor'][::2]==[-30,-15]
+    assert by_id['P014']['positionSource']=='telemetry'
+    assert by_id['P020']['anchor']==canonical['P020']['anchor']
+    assert by_id['Z005']['center']==canonical['Z005']['center']
+    assert by_id['B-03']['measurements']['pressure']['value']==.62
 
 
 def test_position_entry_exit_and_telemetry_not_overwritten(store):
@@ -48,6 +69,17 @@ def test_position_entry_exit_and_telemetry_not_overwritten(store):
     data=observe(store,id='P023',x=-41,z=12)
     assert not any(a['entityId']=='P023' for a in data['active'])
     assert data['events'][0]['type']=='leave'
+
+
+def test_new_power_process_equipment_has_pressure_telemetry_and_live_entry(store):
+    by_id={e['id']:e for e in store.snapshot()['entities']}
+    for device_id in ['B-08','B-10','B-11']:
+        assert by_id[device_id]['measurements']['pressure']['unit']=='MPa'
+        assert by_id[device_id]['measurementSource']=='demo'
+    data=observe(store,id='P016',x=5,z=-7)
+    assert any(a['entityId']=='P016' and a['zoneId']=='Z010' for a in data['active'])
+    data=observe(store,id='P016',x=-2,z=-.6)
+    assert not any(a['entityId']=='P016' for a in data['active'])
 
 
 def test_measurement_source_persistence_and_atomic_batch(store):

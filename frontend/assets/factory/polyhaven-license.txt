@@ -1,0 +1,6 @@
+Modular Industrial Pipes 01 by Jorge Camacho / Poly Haven
+CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+Asset: https://polyhaven.com/a/modular_industrial_pipes_01
+License policy: https://polyhaven.com/license
+Retrieved 2026-10-07. 1K glTF and textures from the official Poly Haven API.
+Only resource URIs were relocated for local serving. Original geometry and textures preserved.

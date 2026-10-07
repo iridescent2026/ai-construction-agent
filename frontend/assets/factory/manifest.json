@@ -119,5 +119,112 @@
     "commit": "f5a53eaadbb46fac8e29faabb6c0ac1b6c6d2311",
     "bytes": 7133,
     "sha256": "645290fbe623e74da82dae25734e8e6d5123f40f85343ad11cf0d990f8b3e4e0"
+  },
+  {
+    "file": "industrial-pipes.gltf",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_1k.gltf",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "cb30fdf4d471374ba439bfd5a0c8105d",
+    "note": "glTF resource paths relocated to industrial-pipes/; original geometry and material data preserved.",
+    "bytes": 9243,
+    "sha256": "afc9c663500da6594b0b96828f1bbf6f47b7c37b024aed8944f410b0e02f9489"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group02_arm_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group02_arm_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "088f90ba0d60c13ff0d6fc43cf734372",
+    "note": "Original 1K asset resource.",
+    "bytes": 898932,
+    "sha256": "4c65dcb651a3d345517fa93ad7c6e48f2388f4e8bb347446f70317c16049867b"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group01_diff_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group01_diff_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "28678434837d64476cb8d75d0314166e",
+    "note": "Original 1K asset resource.",
+    "bytes": 553576,
+    "sha256": "c0233f66b18e3374dfbbb8c8078a41f6571a0809d3eb14dd9d3c332265cfde7b"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group02_nor_gl_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group02_nor_gl_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "282735667b3cd6e2d0ef058f2c260740",
+    "note": "Original 1K asset resource.",
+    "bytes": 725187,
+    "sha256": "84a43ca11a4f1ac84f7fc8336a4e9b7b333d30c13e540f3ff42e662dc6f91b53"
+  },
+  {
+    "file": "industrial-pipes/modular_industrial_pipes_01.bin",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/modular_industrial_pipes_01/modular_industrial_pipes_01.bin",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "a18d063dc719e19b9c20d2f8c0a8bec4",
+    "note": "Original 1K asset resource.",
+    "bytes": 515160,
+    "sha256": "2e11e1a7dabd56b1e158364f48b0b388bf316fcab61a01274740db75dbafa448"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group01_nor_gl_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group01_nor_gl_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "a5d4deb3ea6772c0af1275edeab7dc94",
+    "note": "Original 1K asset resource.",
+    "bytes": 674568,
+    "sha256": "ed4728fde567efe420e3a6e1bdc4238b26c2782218737c7e2de88eeca1e91fb2"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group01_arm_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group01_arm_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "2ab8f10dc9ca832af70cd48183281f97",
+    "note": "Original 1K asset resource.",
+    "bytes": 860825,
+    "sha256": "7fff7d4604491eeb7531ad5f7520517015c72ec7316d1e865d62f23f976dfed6"
+  },
+  {
+    "file": "industrial-pipes/textures/modular_industrial_pipes_01_group02_diff_1k.jpg",
+    "pack": "polyhaven-industrial-pipes",
+    "author": "Jorge Camacho",
+    "license": "CC0-1.0",
+    "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_industrial_pipes_01/modular_industrial_pipes_01_group02_diff_1k.jpg",
+    "sourcePage": "https://polyhaven.com/a/modular_industrial_pipes_01",
+    "sourceMd5": "d3d951f471cfcd15e89cedcd43d28606",
+    "note": "Original 1K asset resource.",
+    "bytes": 580676,
+    "sha256": "ef8a75c402a8871903dcaa147b023d57c640d0de4c7a8acdfdee822861656a92"
+  },
+  {
+    "file": "wall-vent.glb",
+    "pack": "modkit",
+    "author": "JaronKBragg7337",
+    "license": "CC0-1.0",
+    "source": "https://raw.githubusercontent.com/JaronKBragg7337/asset-pack-ue-threejs-blender-unity/f5a53eaadbb46fac8e29faabb6c0ac1b6c6d2311/exports/GLTF/SM_Vent_Wall.glb",
+    "repository": "https://github.com/JaronKBragg7337/asset-pack-ue-threejs-blender-unity",
+    "commit": "f5a53eaadbb46fac8e29faabb6c0ac1b6c6d2311",
+    "bytes": 50764,
+    "sha256": "8e18f6c5c654bf4a774aff41e3e1ccf77078d58f2e8087e01e720e91ccb09390"
   }
 ]

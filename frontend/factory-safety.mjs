@@ -36,7 +36,7 @@ export const DEMO_PATHS={
     overview:{id:'P023',view:'overview',label:'总览 · 施工工人',points:[[-41,12],[-35,12],[-28,19],[-28,23]]},
     vehicle:{id:'E-04',view:'overview',label:'总览 · 工程运输车',points:[[55,5],[55,14],[43,14],[35,14]]},
     a:{id:'P005',view:'a',label:'A 区 · 装配工',points:[[-12,-.6],[-12,-3],[-12,-6.5],[-12,-7]]},
-    b:{id:'P016',view:'b',label:'B 区 · 电工',points:[[-2,-.6],[-2,-3],[-2,-6],[-2,-7]]}
+    b:{id:'P016',view:'b',label:'B 区 · 电工',points:[[-2,-.6],[-2,-5],[-18,-6],[-18,-14]]}
 };
 export function demoPosition(path,seconds){
     const duration=12,phase=(seconds%(duration*2))/duration,t=phase<=1?phase:2-phase;

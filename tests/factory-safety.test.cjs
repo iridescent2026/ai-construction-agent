@@ -31,6 +31,7 @@ test('unknown observations do not fabricate a leave event; recovery to a clear p
 });
 test('all four animation paths enter their intended zones and return to their starting positions',async()=>{
     const {demoPosition,DEMO_PATHS,containsPoint}=await modulePromise;
-    const zones={overview:{...zone,center:[-18,27],size:[36,26]},vehicle:{...zone,center:[28,6],size:[32,26]},a:{...zone,center:[-14,-9],size:[20,8]},b:{...zone,center:[-12.5,-9],size:[22,9]}};
+    const catalog=JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname,'../gis/factory-catalog.json')));
+    const zones=Object.fromEntries(Object.entries({overview:'Z001',vehicle:'Z002',a:'Z003',b:'Z005'}).map(([key,id])=>[key,catalog.entities.find(e=>e.id===id)]));
     for(const [key,path] of Object.entries(DEMO_PATHS)){assert.equal(containsPoint(zones[key],...demoPosition(path,0)),false);assert.equal(containsPoint(zones[key],...demoPosition(path,12)),true);assert.deepEqual(demoPosition(path,24),path.points[0]);}
 });
