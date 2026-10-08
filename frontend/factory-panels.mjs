@@ -1,3 +1,4 @@
+import {steelPanel} from './industrial-themes.mjs';
 const $=id=>document.getElementById(id),drawer=$('dashboard-drawer'),content=$('drawer-content');
 const sections={devices:$('equipment-management'),people:$('personnel-management'),zones:$('zone-management'),alerts:$('alarm-management'),settings:$('dashboard-settings')};
 const titles={devices:'设备监测',people:'人员管理',zones:'危险区域',alerts:'报警中心',settings:'图层与板块调节'},positions=new Map();let active='overview',width=320,height=560;
@@ -15,6 +16,8 @@ function open(key){
     document.querySelectorAll('[data-drawer]').forEach(button=>{button.classList.toggle('selected',button.dataset.drawer===key);button.setAttribute('aria-expanded',String(button.dataset.drawer===key&&key!=='overview'));});
 }
 document.querySelector('.command-rail').addEventListener('click',e=>{const button=e.target.closest('[data-drawer]');if(!button)return;const key=button.dataset.drawer;open(key===active?'overview':key);if(key==='overview')window.FactoryTwin?.switchView('overview');});
+window.addEventListener('analysis-navigate',()=>open('overview'));
+window.addEventListener('factory-select',e=>{if(e.detail&&active!=='overview')open('overview');});
 $('drawer-close').addEventListener('click',()=>open('overview'));document.addEventListener('keydown',e=>{if(e.key==='Escape')open('overview');});
 document.querySelectorAll('.home-nav a[href^="#"]').forEach(link=>link.addEventListener('click',e=>{const key=Object.keys(sections).find(key=>'#'+sections[key].id===link.getAttribute('href'));if(key){e.preventDefault();open(key);}}));
 function persist(){try{localStorage.setItem('factory-dashboard-layout',JSON.stringify({width,height}));}catch{}}
@@ -30,4 +33,4 @@ document.querySelectorAll('[data-factory-layer]').forEach(input=>input.addEventL
 window.addEventListener('factory-layer-change',e=>{const input=document.querySelector(`[data-factory-layer="${e.detail.kind}"]`);if(input)input.checked=e.detail.enabled;});
 
 // Four recessed fasteners on each structural panel, matching the original shell.
-document.querySelectorAll('.home-metrics>div,.scene-card,.command-rail,#dashboard-drawer,.home-module').forEach(el=>{el.classList.add('metal-frame');for(const corner of ['tl','tr','bl','br']){const bolt=document.createElement('i');bolt.className='frame-bolt '+corner;bolt.setAttribute('aria-hidden','true');el.append(bolt);}});
+document.querySelectorAll('.home-metrics>div,.scene-card,.command-rail,#dashboard-drawer,.home-module').forEach(el=>{el.classList.add('metal-frame');steelPanel(el);});

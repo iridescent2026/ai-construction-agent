@@ -1,4 +1,4 @@
-export function geoPoint(data,view,x,z){const [ox,oz,scale]=data.coordinateSystem.frames[view],origin=data.coordinateSystem.origin;return [origin[0]+(ox+x*scale)/(111320*Math.cos(origin[1]*Math.PI/180)),origin[1]-(oz+z*scale)/111320];}
+export function geoPoint(data,view,x,z){const [ox,oz,scale]=data.coordinateSystem.frames[view],origin=data.coordinateSystem.origin;const r=data.coordinateSystem.rotations?.[view]||0,c=Math.cos(r),s=Math.sin(r);return [origin[0]+(ox+scale*(c*x-s*z))/(111320*Math.cos(origin[1]*Math.PI/180)),origin[1]-(oz+scale*(s*x+c*z))/111320];}
 export function adaptFactory(data){
     const fresh=t=>{const age=Date.now()-Date.parse(t);return Number.isFinite(age)&&age>=-5000&&age<=120000;};
     const collection=features=>({type:'FeatureCollection',features});

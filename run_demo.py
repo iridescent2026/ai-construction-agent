@@ -25,6 +25,7 @@ def main():
         ['serve_frontend.py', str(web_port), str(gis_port), str(electrical_port), str(agent_port)],
     ]
     env = {**os.environ, 'GIS_API':f'http://127.0.0.1:{gis_port}', 'ELEC_API':f'http://127.0.0.1:{electrical_port}', 'ALLOWED_ORIGINS':f'http://127.0.0.1:{web_port},http://localhost:{web_port}'}
+    env.setdefault('FACTORY_ANALYSIS_DEMO','1')
     children = []
     try:
         for command in commands:

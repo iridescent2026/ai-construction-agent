@@ -83,10 +83,12 @@ def test_new_power_process_equipment_has_pressure_telemetry_and_live_entry(store
 
 
 def test_measurement_source_persistence_and_atomic_batch(store):
+    next(e for e in store.data['entities'] if e['id']=='B-03')['measurementNote']='演示温升'
     data=observe(store,id='B-03',measurements={'pressure':{'value':.62,'unit':'MPa'}})
     store.tick()
     device=next(e for e in store.snapshot()['entities'] if e['id']=='B-03')
     assert device['measurementSource']=='telemetry'
+    assert 'measurementNote' not in device
     assert device['measurements']['pressure']['value']==.62
     restarted=FactoryStore(store.path)
     assert next(e for e in restarted.snapshot()['entities'] if e['id']=='B-03')['measurementSource']=='telemetry'
