@@ -5,6 +5,7 @@ const {colors,escape:escapeHtml,deviceState,personState}=window.SiteUI;
 const $=id=>document.getElementById(id);
 const state={zones:null,buffers:null,spatial:null,devices:null,snapshot:null,route:[],mode:'2d',visibility:{zones:true,buffers:true,people:true,devices:true,route:true}};
 let scene=null,sceneLoading=null,deviceBusy=false,spatialBusy=false,simulationBusy=false,lastFreshness='';
+let factoryBusy=false;
 const map=L.map('map',{zoomControl:true,minZoom:12,maxZoom:21}).setView([30.293,120.008],17);
 const base=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Esri World Imagery'});
 const zoneLayer=L.geoJSON(null,{style:f=>({color:colors[f.properties.risk_level],weight:2,fillOpacity:0.18}),
@@ -29,8 +30,11 @@ async function request(url,options={}){
     return response.json();
 }
 function icon(kind,color){return L.divIcon({className:`map-pin ${kind}`,html:`<span style="--pin:${color}"></span>`,iconSize:[15,15],iconAnchor:[7.5,7.5]});}
-function showDetail(info){$('detail-content').innerHTML=`<h3>${escapeHtml(info.title)}</h3><p>${escapeHtml(info.text)}</p>`;$('scene-detail').hidden=false;}
-$('close-detail').addEventListener('click',()=>{$('scene-detail').hidden=true;});
+let selectedDetail=null,previewDetail=null;
+function renderDetail(){const info=previewDetail||selectedDetail;$('scene-detail').hidden=!info||!!window.FACTORY_WORKBENCH&&state.mode==='3d';if(info)$('detail-content').innerHTML=`<h3>${escapeHtml(info.title)}</h3><p>${escapeHtml(info.text)}</p>`;}
+function showDetail(info){selectedDetail=info;previewDetail=null;renderDetail();}
+function previewDetailFor(info){previewDetail=info;renderDetail();}
+$('close-detail').addEventListener('click',()=>{selectedDetail=null;previewDetail=null;scene?.markers.clearPreview();renderDetail();});
 function syncScene(){scene?.update(state);window.SiteManagement?.render();}
 function counts(){
     $('metric-zones').textContent=state.zones?.features.length??'—';
@@ -38,7 +42,7 @@ function counts(){
     const current=people?.filter(p=>window.SiteUI.fresh(p));
     $('metric-people').textContent=current?.length??'—';
     $('people-note').textContent=people?`登记 ${people.length} 人 · 过期 ${people.length-current.length} 人`:'空间数据未知';
-    $('metric-high').textContent=state.devices?.filter(d=>deviceState(d).level==='高').length??'—';
+    $('metric-high').textContent=window.FACTORY_WORKBENCH?(state.factoryData?.active.filter(a=>a.state!=='unknown').length??'—'):(state.devices?.filter(d=>deviceState(d).level==='高').length??'—');
     $('metric-unknown').textContent=people && state.devices ? people.length-current.length+state.devices.filter(d=>deviceState(d).level==='未知').length:'—';
 }
 function resetView(){if(state.mode==='3d')scene?.reset();else if(state.zones)map.fitBounds(zoneLayer.getBounds(),{padding:[40,40]});}
@@ -46,7 +50,7 @@ async function setMode(mode){
     if(mode==='3d'){
         try{
             if(!scene){
-                if(!sceneLoading)sceneLoading=import('./scene3d.js?v=3').then(({SiteScene})=>{scene=new SiteScene($('scene3d'),showDetail);scene.update(state);return scene;});
+                if(!sceneLoading)sceneLoading=import(window.FACTORY_WORKBENCH?'./factory-gis-scene.mjs?v=1':'./construction-scene.js?v=7').then(({SiteScene})=>{scene=new SiteScene($('scene3d'),showDetail,previewDetailFor);scene.update(state);return scene;});
                 await sceneLoading;
             }
         }catch(error){sceneLoading=null;notice('当前设备无法启动 3D，已保留二维视图。可刷新后重试。');return;}
@@ -56,7 +60,7 @@ async function setMode(mode){
     $('view-2d').classList.toggle('active',mode==='2d');$('view-3d').classList.toggle('active',mode==='3d');
     $('view-2d').setAttribute('aria-pressed',mode==='2d');$('view-3d').setAttribute('aria-pressed',mode==='3d');
     $('basemap').hidden=mode==='3d';$('compass').hidden=mode==='3d';
-    $('view-note').textContent=mode==='3d'?'拖动旋转 · 滚轮缩放 · 右键平移 · 点击对象查看':'圆点为人员，方块为设备；点击对象可查看详情。';
+    $('view-note').textContent=mode==='3d'?'悬停图标看编码与详情 · 圆点为人员，方块为建筑 / 设备 · 拖动旋转':'圆点为人员，方块为设备；点击对象可查看详情。';
     $('view-help').textContent=mode==='3d'?'3D 为空间关系示意；建筑、塔吊及人员模型均为设计示意，非现场实测。两种视图共享同一观测数据。':'坐标与业务图层可离线查看。卫星影像需要联网。';
     scene?.setVisible(mode==='3d');if(mode==='2d')map.invalidateSize();
 }
@@ -66,6 +70,7 @@ $('reset-view').addEventListener('click',resetView);
 $('basemap').addEventListener('click',()=>{satellite=!satellite;satellite?base.addTo(map):map.removeLayer(base);$('basemap').setAttribute('aria-pressed',satellite);$('basemap').textContent=satellite?'关闭底图':'卫星底图';});
 
 async function loadZones(){
+    if(window.FACTORY_WORKBENCH)return loadFactory();
     try{const [zones,buffers]=await Promise.all([request(`${API_BASE}/zones.geojson`),request(`${API_BASE}/buffers.geojson`)]);
         state.zones=zones;state.buffers=buffers;zoneLayer.clearLayers().addData(zones);bufferLayer.clearLayers().addData(buffers);resetView();syncScene();counts();
     }catch(error){notice('区域及缓冲图层未加载，请检查空间服务后点击刷新。');}
@@ -85,6 +90,7 @@ function renderSpatial(){
     counts();syncScene();
 }
 async function loadState(){
+    if(window.FACTORY_WORKBENCH)return loadFactory();
     if(spatialBusy)return;spatialBusy=true;
     try{state.spatial=await request(`${API_BASE}/state`);status('gis-status',`空间已连接 · 版本 ${state.spatial.revision}`,true);}
     catch{state.spatial=null;status('gis-status','空间断连 · 人员状态未知',false);}
@@ -97,10 +103,10 @@ function renderDevices(){
     const cards=[];
     for(const d of state.devices){
         const view=deviceState(d);
-        const description=`<b>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</b><br>${view.label}<br>负荷${d.load}% · 温度${d.temperature}℃ · 漏电${d.leakage}mA<br>采集 ${escapeHtml(localTime(d.timestamp))}`;
+        const description=`<b>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</b><br>${view.label}<br>${d.factory?escapeHtml(factoryReadings(d)):`负荷${d.load}% · 温度${d.temperature}℃ · 漏电${d.leakage}mA`}<br>采集 ${escapeHtml(localTime(d.timestamp))}`;
         L.marker([d.location[1],d.location[0]],{icon:icon('device',view.color)}).addTo(deviceLayer).bindPopup(description).bindTooltip(escapeHtml(d.device_id));
         if(filter!=='all' && filter!==view.level)continue;
-        cards.push(`<div class="device-card" style="border-left-color:${view.color}"><div class="card-top"><strong>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</strong><span class="risk-label">${view.label}</span></div><div class="card-values"><span>${d.load}%</span><span>${d.temperature}℃</span><span>${d.leakage}mA</span></div><div>${escapeHtml(view.level==='未知'?'观测过期，不能据此判断当前安全':d.alert)}</div><div class="card-meta">${d.source==='demo'?'演示观测':'上报观测'} · ${escapeHtml(localTime(d.timestamp))}</div><button type="button" class="locate" data-device="${escapeHtml(d.device_id)}">定位 ${escapeHtml(d.device_id)}</button></div>`);
+        cards.push(`<div class="device-card" style="border-left-color:${view.color}"><div class="card-top"><strong>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</strong><span class="risk-label">${view.label}</span></div><div class="card-values">${d.factory?`<span>${escapeHtml(factoryReadings(d))}</span>`:`<span>${d.load}%</span><span>${d.temperature}℃</span><span>${d.leakage}mA</span>`}</div><div>${escapeHtml(view.level==='未知'?'观测过期，不能据此判断当前安全':d.alert)}</div><div class="card-meta">${d.source==='demo'?'演示观测':'上报观测'} · ${escapeHtml(localTime(d.timestamp))}</div><button type="button" class="locate" data-device="${escapeHtml(d.device_id)}">定位 ${escapeHtml(d.device_id)}</button></div>`);
     }
     $('device-list').innerHTML=cards.join('')||'<p class="empty">该分类暂无设备</p>';
     counts();syncScene();
@@ -113,6 +119,7 @@ function acceptDevices(data){
     status('device-status','电气服务已连接',true);renderDevices();
 }
 async function loadDevices(){
+    if(window.FACTORY_WORKBENCH)return loadFactory();
     if(deviceBusy)return;deviceBusy=true;
     try{acceptDevices(await request(`${ELECTRICAL_API}/devices`));}
     catch{state.devices=null;state.route=[];routeLayer.clearLayers();$('snapshot-label').textContent='';$('route-start').innerHTML='';status('device-status','电气断连 · 当前状态未知',false);renderDevices();}
@@ -123,9 +130,10 @@ $('device-list').addEventListener('click',event=>{
     const button=event.target.closest('button[data-device]');if(!button)return;
     const d=state.devices?.find(d=>d.device_id===button.dataset.device);if(!d)return;
     if(state.mode==='3d')scene?.focus(...d.location);else map.setView([d.location[1],d.location[0]],19);
-    showDetail({title:`${d.device_id} ${d.device_type}`,text:`${deviceState(d).label}。负荷${d.load}% / 温度${d.temperature}℃ / 漏电${d.leakage}mA。`});
+    showDetail({title:`${d.device_id} ${d.device_type}`,text:`${deviceState(d).label}。${d.factory?factoryReadings(d):`负荷${d.load}% / 温度${d.temperature}℃ / 漏电${d.leakage}mA`}。`});
 });
 $('simulate').addEventListener('click',async()=>{
+    if(window.FACTORY_WORKBENCH){const {factoryRequest}=await import('./factory-client.mjs');await factoryRequest('/demo',{action:'start',key:'overview'});await loadFactory();notice('工厂人员移动演示已启动，首页与 GIS 同步。');return;}
     if(simulationBusy || deviceBusy || spatialBusy)return;simulationBusy=true;$('simulate').disabled=true;
     const results=await Promise.allSettled([request(`${ELECTRICAL_API}/simulation/tick`,{method:'POST'}),request(`${API_BASE}/simulation/tick`,{method:'POST'})]);
     if(results[0].status==='fulfilled')acceptDevices(results[0].value);
@@ -141,6 +149,14 @@ tabs.forEach((tab,i)=>{tab.addEventListener('click',()=>selectTab(tab));tab.addE
 document.querySelectorAll('[data-query]').forEach(button=>button.addEventListener('click',()=>{$('query').value=button.dataset.query;$('query').focus();}));
 $('ask-form').addEventListener('submit',async event=>{
     event.preventDefault();$('ask-button').disabled=true;const query=$('query').value.trim();
+    if(window.FACTORY_WORKBENCH&&!/巡检|路线/.test(query)){
+        const data=state.factoryData;
+        if(!data){$('answer').textContent='工厂后台断连，请恢复连接后查询当前观测。';}
+        else{const people=data.entities.filter(e=>e.kind==='person'),devices=state.devices||[],actual=data.entities.filter(e=>e.positionSource==='telemetry'||e.measurementSource==='telemetry').length;
+            $('answer').textContent=`工厂观测 v${data.revision} · ${localTime(data.updatedAt)}\n${people.length} 位人员、${devices.length} 台设备、${state.zones.features.length} 处危险区。\n当前 ${data.active.length} 条区域进入报警：${data.active.map(a=>`${a.entityId} → ${a.zoneId}${a.state==='unknown'?'（位置过期，待核验）':''}`).join('；')||'无'}。\n${actual} 个实体使用接口上报，其余为后台演示数据。\n${devices.slice(0,3).map(d=>`${d.device_id} ${d.device_type}：${factoryReadings(d)}`).join('\n')}\n设备安全阈值待现场配置，演示读数不能判定设备安全。`;
+        }
+        $('ask-button').disabled=false;return;
+    }
     const options={method:'POST'};let points=null;
     if(/巡检|路线/.test(query)){
         state.route=[];routeLayer.clearLayers();syncScene();
@@ -157,5 +173,8 @@ $('ask-form').addEventListener('submit',async event=>{
 });
 window.addEventListener('pagehide',event=>{if(!event.persisted)scene?.dispose();});
 Promise.all([loadZones(),loadState(),loadDevices()]).then(()=>setMode('3d'));
-setInterval(()=>{if(!simulationBusy){loadState();loadDevices();}},30000);
+setInterval(()=>{if(!simulationBusy){loadState();loadDevices();}},window.FACTORY_WORKBENCH?1000:30000);
 setInterval(()=>{const key=JSON.stringify([state.devices?.map(d=>deviceState(d).level),state.spatial?.people.map(p=>window.SiteUI.fresh(p))]);if(key!==lastFreshness){lastFreshness=key;renderDevices();renderSpatial();if(state.spatial?.people.some(p=>p.fresh!==undefined && p.fresh!==window.SiteUI.fresh(p)))loadState();}},5000);
+
+function factoryReadings(d){const names={temperature:'温度',load:'负荷',pressure:'压力',current:'电流',voltage:'电压',leakage:'漏电',speed:'速度'};return Object.entries(d.measurements||{}).map(([k,m])=>`${names[k]||k} ${m.value}${m.unit}`).join(' · ')||'测量数据待接入';}
+async function loadFactory(){if(factoryBusy)return;factoryBusy=true;try{const [{factoryRequest},{adaptFactory}]=await Promise.all([import('./factory-client.mjs'),import('./factory-gis-data.mjs')]);const raw=await factoryRequest();const data=adaptFactory(raw);state.factoryData=raw;state.zones=data.zones;state.buffers=data.buffers;zoneLayer.clearLayers().addData(data.zones);bufferLayer.clearLayers();state.spatial=data.spatial;state.devices=data.devices;state.snapshot=data.snapshot_id;$('snapshot-label').textContent=`工厂观测 v${data.snapshot_id} · 首页 / GIS 同源`;status('gis-status',`工厂空间已连接 · 版本 ${data.snapshot_id}`,true);status('device-status','工厂监测已连接 · 自动同步',true);renderSpatial();renderDevices();if(!$('route-start').options.length)$('route-start').innerHTML=data.devices.map(d=>`<option value="${escapeHtml(d.device_id)}">${escapeHtml(d.device_id)}</option>`).join('');}catch(error){state.factoryData=null;state.spatial=null;state.devices=null;renderSpatial();renderDevices();status('gis-status','工厂后台断连 · 位置未知',false);status('device-status','监测断连 · 状态未知',false);}finally{factoryBusy=false;}}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工安智瞳 · 工厂数字孪生空间视图</title>
+<link rel="stylesheet" href="scene-model.css?v=7"><link rel="stylesheet" href="factory.css?v=1">
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
+<script src="config.js"></script><script>if(new URLSearchParams(location.search).has('embed')){const style=document.createElement('link');style.rel='stylesheet';style.href='factory-embed.css?v=1';document.head.append(style);}</script><link rel="stylesheet" href="factory-section.css?v=1"></head>
+<body>
+<header><a class="wordmark" href="./"><span class="brand-symbol">◈</span><span>工安智瞳<small>INDUSTRIAL DIGITAL TWIN</small></span></a><span class="design-label">工厂场景设计 · 演示</span><a class="back-link" href="./">返回工厂首页 ↗</a></header>
+<main>
+<section class="page-intro"><div><span class="eyebrow">FACILITY / SAFETY INSPECTION</span><h1>工厂数字孪生</h1></div><p>从园区总览进入生产与动力工区，查看设备名称及巡检关注点。</p></section>
+<nav class="view-tabs" aria-label="工厂场景视图">
+<button data-view="overview" aria-pressed="true"><span>01</span><strong>全景总视图</strong><small>统一厂区轮廓 · 纯建筑外观</small></button>
+<button data-view="a" aria-pressed="false"><span>02</span><strong>局部 A · 装配制造</strong><small>机械设备与车间配电</small></button>
+<button data-view="b" aria-pressed="false"><span>03</span><strong>局部 B · 动力设备</strong><small>发电、换热与水处理机组</small></button>
+<button data-view="section" aria-pressed="false"><span>04</span><strong>厂区整体剖面</strong><small>A 装配 / B 动力 · 同屏展示</small></button>
+</nav>
+<div class="viewer-grid">
+<section class="scene-card" aria-label="交互三维工厂">
+<div class="scene-heading"><div><span id="view-code">OVERVIEW</span><h2 id="scene-title">工厂全景总视图</h2></div><button id="factory-reset">恢复视角</button></div>
+<div id="factory-stage" tabindex="-1" aria-label="工厂交互三维场景"><div id="loading" role="status">正在加载工业模型…</div>
+<div class="scene-caption" id="scene-caption"></div><div id="scene-alert" role="status" hidden></div>
+<div class="factory-detail" id="factory-detail" aria-live="polite" hidden><button id="factory-close" aria-label="关闭设备详情">×</button><span id="detail-id"></span><h3 id="detail-name"></h3><p id="detail-description"></p></div>
+<div class="scene-footer"><span>拖动旋转 · 滚轮缩放 · 悬停图标查看名称</span><span>尺寸与布局为设计示意</span></div>
+</div>
+<div class="scene-status"><span><i></i> 本地三维场景</span><span id="asset-status">模型加载中</span><button id="factory-export">导出当前视图 PNG</button></div>
+</section>
+<aside class="inspection-panel"><span class="eyebrow">INSPECTION DIRECTORY</span><h2 id="directory-title">园区功能分区</h2><p id="directory-note">选择分区进入工区，查看具体设备。</p><div id="equipment-directory"></div><div class="panel-note"><span>模型来源</span><p>Kenney / CC0<br>ModKit / CC0<br>专项设备补充建模</p><a href="assets/factory/manifest.json" target="_blank" rel="noopener">查看资产来源清单 ↗</a></div></aside>
+</div>
+<footer>统一材质：混凝土灰 / 工业钢蓝 / 安全黄　 ·　 悬停展示设备中文名称，点击保留详情。<span id="scene-error" role="alert"></span></footer>
+</main>
+<dialog id="image-export"><div class="export-heading"><strong>当前场景配图</strong><button id="export-close" aria-label="关闭配图预览">×</button></div><img id="export-image" alt="当前工厂三维场景配图"><a id="export-download" download>保存 PNG 配图 ↓</a></dialog>
+<script type="module" src="factory-app.mjs?v=6"></script>
+</body></html>

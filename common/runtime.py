@@ -8,6 +8,8 @@ FRESH_SECONDS = 120
 
 def is_fresh(record, now=None):
     try:
+        if not isinstance(record.get('timestamp'), str):
+            return False
         timestamp = datetime.fromisoformat(record['timestamp'].replace('Z','+00:00'))
         age = ((now or datetime.now(timezone.utc)) - timestamp).total_seconds()
         return 0 <= age <= FRESH_SECONDS

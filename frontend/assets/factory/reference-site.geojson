@@ -1,0 +1,692 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-346554191",
+        "kind": "road",
+        "title": "周边道路",
+        "source": "OpenStreetMap",
+        "sourceUrl": "https://www.openstreetmap.org/way/346554191",
+        "basis": "public-map",
+        "width": 7,
+        "tags": {
+          "highway": "unclassified"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.5229078,
+            30.2614421
+          ],
+          [
+            120.5230683,
+            30.2617703
+          ],
+          [
+            120.5235842,
+            30.2626828
+          ],
+          [
+            120.5242467,
+            30.2639324
+          ],
+          [
+            120.5249146,
+            30.2652497
+          ],
+          [
+            120.5255395,
+            30.266351
+          ],
+          [
+            120.5259901,
+            30.2671479
+          ],
+          [
+            120.5261242,
+            30.2673379
+          ],
+          [
+            120.5264166,
+            30.2677609
+          ],
+          [
+            120.5269825,
+            30.2685101
+          ],
+          [
+            120.5277523,
+            30.2695493
+          ],
+          [
+            120.5288118,
+            30.2710258
+          ],
+          [
+            120.5290909,
+            30.2713697
+          ],
+          [
+            120.5300778,
+            30.2727539
+          ],
+          [
+            120.5310917,
+            30.2741298
+          ],
+          [
+            120.5318055,
+            30.2751183
+          ],
+          [
+            120.5320519,
+            30.2754595
+          ],
+          [
+            120.5323194,
+            30.2758545
+          ],
+          [
+            120.5327091,
+            30.2764298
+          ],
+          [
+            120.5333798,
+            30.2774581
+          ],
+          [
+            120.5337098,
+            30.2779191
+          ],
+          [
+            120.5338924,
+            30.2781807
+          ],
+          [
+            120.5344758,
+            30.2789552
+          ],
+          [
+            120.5349062,
+            30.2795809
+          ],
+          [
+            120.5354556,
+            30.2803494
+          ],
+          [
+            120.5357442,
+            30.2807149
+          ],
+          [
+            120.5363577,
+            30.28155
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-541486435",
+        "kind": "road",
+        "title": "周边道路",
+        "source": "OpenStreetMap",
+        "sourceUrl": "https://www.openstreetmap.org/way/541486435",
+        "basis": "public-map",
+        "width": 7,
+        "tags": {
+          "highway": "unclassified"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.5333678,
+            30.2816616
+          ],
+          [
+            120.5347063,
+            30.2811739
+          ],
+          [
+            120.5348171,
+            30.2811157
+          ],
+          [
+            120.5357442,
+            30.2807149
+          ],
+          [
+            120.5365758,
+            30.2803553
+          ],
+          [
+            120.5368843,
+            30.2801704
+          ],
+          [
+            120.537874,
+            30.279577
+          ],
+          [
+            120.5381557,
+            30.279347
+          ],
+          [
+            120.538464,
+            30.2790952
+          ],
+          [
+            120.5392139,
+            30.278457
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-541488032",
+        "kind": "road",
+        "title": "周边道路",
+        "source": "OpenStreetMap",
+        "sourceUrl": "https://www.openstreetmap.org/way/541488032",
+        "basis": "public-map",
+        "width": 7,
+        "tags": {
+          "highway": "tertiary"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.5281183,
+            30.2820668
+          ],
+          [
+            120.5306563,
+            30.2811168
+          ],
+          [
+            120.5307693,
+            30.2810745
+          ],
+          [
+            120.5315425,
+            30.2807851
+          ],
+          [
+            120.5325445,
+            30.2804125
+          ],
+          [
+            120.5338461,
+            30.2799285
+          ],
+          [
+            120.533967,
+            30.2798863
+          ],
+          [
+            120.5349062,
+            30.2795809
+          ],
+          [
+            120.535543,
+            30.2793738
+          ],
+          [
+            120.5361588,
+            30.2791561
+          ],
+          [
+            120.5369333,
+            30.2788822
+          ],
+          [
+            120.5370879,
+            30.2788002
+          ],
+          [
+            120.5371692,
+            30.2786913
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-541488035",
+        "kind": "road",
+        "title": "周边道路",
+        "source": "OpenStreetMap",
+        "sourceUrl": "https://www.openstreetmap.org/way/541488035",
+        "basis": "public-map",
+        "width": 7,
+        "tags": {
+          "highway": "residential"
+        }
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.5352007,
+            30.2777796
+          ],
+          [
+            120.5358623,
+            30.2787158
+          ],
+          [
+            120.5361588,
+            30.2791561
+          ],
+          [
+            120.5365832,
+            30.2797854
+          ],
+          [
+            120.5368843,
+            30.2801704
+          ],
+          [
+            120.5372082,
+            30.2806065
+          ],
+          [
+            120.5376276,
+            30.2811714
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "osm-1201137102",
+        "kind": "boundary",
+        "title": "杭州泉源五金机械厂",
+        "source": "OpenStreetMap",
+        "sourceUrl": "https://www.openstreetmap.org/way/1201137102",
+        "basis": "public-map",
+        "width": 7,
+        "tags": {
+          "landuse": "industrial",
+          "name": "杭州泉源五金机械厂"
+        }
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.5356216,
+              30.2804381
+            ],
+            [
+              120.5351261,
+              30.2797713
+            ],
+            [
+              120.5354487,
+              30.2796202
+            ],
+            [
+              120.5353766,
+              30.2795333
+            ],
+            [
+              120.5357903,
+              30.2793499
+            ],
+            [
+              120.5363771,
+              30.2801031
+            ],
+            [
+              120.5356216,
+              30.2804381
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "F-A",
+        "title": "西侧主厂房 · A 工区演示承载",
+        "kind": "building",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson",
+        "note": "屋顶投影近似描绘，非测绘数据。内部工区用途为演示假设。",
+        "height": 10,
+        "heightBasis": "assumed",
+        "workArea": "a"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.53555667,
+              30.28029273
+            ],
+            [
+              120.53583562,
+              30.28018155
+            ],
+            [
+              120.53550303,
+              30.27971366
+            ],
+            [
+              120.53520262,
+              30.27983411
+            ],
+            [
+              120.53555667,
+              30.28029273
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "F-B",
+        "title": "东侧主厂房 · B 工区演示承载",
+        "kind": "building",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson",
+        "note": "屋顶投影近似描绘，非测绘数据。内部工区用途为演示假设。",
+        "height": 10,
+        "heightBasis": "assumed",
+        "workArea": "b"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.53585708,
+              30.28017229
+            ],
+            [
+              120.53629696,
+              30.28000088
+            ],
+            [
+              120.53593755,
+              30.27951909
+            ],
+            [
+              120.53577662,
+              30.27957932
+            ],
+            [
+              120.53571224,
+              30.27950056
+            ],
+            [
+              120.53554058,
+              30.27957005
+            ],
+            [
+              120.5355674,
+              30.27973219
+            ],
+            [
+              120.53585708,
+              30.28017229
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "F-C",
+        "title": "门前附属建筑",
+        "kind": "building",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson",
+        "note": "屋顶投影近似描绘，非测绘数据。",
+        "height": 4,
+        "heightBasis": "assumed"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.53544939,
+              30.2797183
+            ],
+            [
+              120.53557277,
+              30.2796766
+            ],
+            [
+              120.53551912,
+              30.27959322
+            ],
+            [
+              120.53539038,
+              30.27964417
+            ],
+            [
+              120.53544939,
+              30.2797183
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "F-D",
+        "title": "北侧条形附属建筑",
+        "kind": "building",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson",
+        "note": "屋顶投影近似描绘，非测绘数据。",
+        "height": 4,
+        "heightBasis": "assumed"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.53561568,
+              30.28039002
+            ],
+            [
+              120.53628623,
+              30.28013523
+            ],
+            [
+              120.53625405,
+              30.280075
+            ],
+            [
+              120.53557277,
+              30.28033443
+            ],
+            [
+              120.53561568,
+              30.28039002
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "Y-01",
+        "title": "厂前作业空地（近似范围）",
+        "kind": "yard",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "sourceUrl": "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/11/query?geometry=120.53575%2C30.2799&geometryType=esriGeometryPoint&inSR=4326&outFields=*&returnGeometry=false&f=pjson",
+        "note": "屋顶投影近似描绘，非测绘数据。"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              120.53527236,
+              30.27974146
+            ],
+            [
+              120.53537428,
+              30.27969976
+            ],
+            [
+              120.53541183,
+              30.27962564
+            ],
+            [
+              120.53555131,
+              30.27956542
+            ],
+            [
+              120.53571224,
+              30.2794913
+            ],
+            [
+              120.53579271,
+              30.27948667
+            ],
+            [
+              120.53584635,
+              30.27943108
+            ],
+            [
+              120.53578198,
+              30.27937548
+            ],
+            [
+              120.53550303,
+              30.2794913
+            ],
+            [
+              120.53554595,
+              30.27955615
+            ],
+            [
+              120.53543329,
+              30.27959785
+            ],
+            [
+              120.53536892,
+              30.27963028
+            ],
+            [
+              120.53527236,
+              30.27974146
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "R-01",
+        "title": "厂内东侧通行道路（近似）",
+        "kind": "road",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "width": 5,
+        "note": "由影像可见通行空间推定；不用于实际导航。"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.53559422,
+            30.28033906
+          ],
+          [
+            120.53629696,
+            30.28005647
+          ],
+          [
+            120.53596973,
+            30.27942644
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "R-02",
+        "title": "入口至厂前空地通道（近似）",
+        "kind": "road",
+        "basis": "imagery-trace",
+        "source": "Esri World Imagery",
+        "width": 4,
+        "note": "由影像可见通行空间推定；不用于实际导航。"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            120.53524017,
+            30.27972756
+          ],
+          [
+            120.53536355,
+            30.2796627
+          ],
+          [
+            120.5355674,
+            30.27951909
+          ],
+          [
+            120.53577662,
+            30.27941718
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "G-01",
+        "title": "厂区入口候选",
+        "kind": "gate",
+        "basis": "imagery-trace",
+        "note": "依据通行空间推定，未现场核实。"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          120.53524017,
+          30.27972756
+        ]
+      }
+    }
+  ]
+}

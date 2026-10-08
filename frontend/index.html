@@ -1,46 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>工安智瞳 · 工地安全工作台</title>
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css"><link rel="stylesheet" href="styles.css?v=3">
-<link rel="stylesheet" href="industrial.css?v=3">
-<link rel="stylesheet" href="steel.css?v=4"><link rel="stylesheet" href="heavy-steel.css?v=5"><script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
-</head>
-<body>
-<header class="topbar"><div class="brand"><div class="brand-mark"><span>工</span></div><div><h1>工安智瞳</h1><p>CONSTRUCTION SAFETY · 安全工作台</p></div></div><div class="top-actions"><span class="demo-badge">杭州 · 演示工地 A</span><button id="refresh" type="button">刷新数据</button><button id="simulate" class="primary" type="button">更新演示观测</button></div></header>
-<div id="notice" class="notice" role="status" hidden></div>
-<main class="workspace">
-<section class="main" aria-label="工地可视化">
-<div class="metrics">
-<div class="metric"><span>危险区域</span><strong id="metric-zones">—</strong><small>已配置的作业范围</small></div>
-<div class="metric"><span>当前有效人员</span><strong id="metric-people">—</strong><small id="people-note">核验观测时间中</small></div>
-<div class="metric"><span>高风险设备</span><strong id="metric-high">—</strong><small>单项硬告警优先</small></div>
-<div class="metric"><span>未知状态</span><strong id="metric-unknown">—</strong><small>过期位置 + 未知设备</small></div>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工安智瞳 · 工厂安全首页</title>
+<link rel="stylesheet" href="scene-model.css?v=7"><link rel="stylesheet" href="factory.css?v=2"><link rel="stylesheet" href="factory-home.css?v=18">
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.js"}}</script>
+<link rel="stylesheet" href="factory-metal.css?v=1"><script src="config.js"></script>
+<link rel="stylesheet" href="factory-section.css?v=1"><link rel="stylesheet" href="industrial-themes.css?v=12"><link rel="stylesheet" href="factory-analysis.css?v=15"><link rel="stylesheet" href="steel-system.css?v=16"><link rel="stylesheet" href="workbench-navigation.css?v=18"></head>
+<body class="factory-home">
+<header class="app-header"><a class="brand-lockup" href="./" aria-label="工安智瞳首页"><span class="brand-emblem" aria-hidden="true"></span><span class="brand-type"><span class="brand-title">工安智瞳</span><span class="brand-subtitle">CONSTRUCTION SAFETY AI</span></span></a><span class="brand-motto">用数据守护每一处作业现场</span><span class="design-label"><i></i> 后台实时同步 · 演示</span><nav class="home-nav" aria-label="首页功能"><a href="#equipment-management">设备监测</a><a href="#personnel-management">人员管理</a><a href="#zone-management">危险区域</a><a href="#factory-analysis">工厂分析</a><button id="data-refresh">刷新数据</button><a href="workbench.html">GIS 工作台 ↗</a></nav></header>
+<nav class="command-rail" aria-label="工作台导航"><span class="rail-caption">CONTROL</span><button data-drawer="overview" aria-label="全景" aria-expanded="false" class="selected"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9 12 3l9 6v11H3Z M9 20v-7h6v7"/></svg><span>全景</span></button><button data-drawer="devices" aria-label="设备监测" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4Z M8 8h8 M8 12h5 M8 16h8"/></svg><span>设备监测</span></button><button data-drawer="people" aria-label="人员管理" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-3a8 8 0 0 1 16 0v3"/></svg><span>人员管理</span></button><button data-drawer="zones" aria-label="危险区域" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 22 20H2Z M12 9v5 M12 17v1"/></svg><span>危险区域</span></button><button data-drawer="alerts" aria-label="报警中心" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14l-2-3V8a5 5 0 0 0-10 0v6Z M10 21h4"/></svg><span>报警中心</span><b id="rail-alert-count" hidden></b></button><button data-drawer="settings" aria-label="图层调节" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6"/></svg><span>图层调节</span></button><a href="workbench.html" aria-label="原 GIS 工作台"><span>↗</span><small>GIS</small></a></nav>
+<aside id="dashboard-drawer" aria-label="可调节功能板块" hidden><div class="drawer-heading"><div><span class="eyebrow">CONTROL PANEL</span><h2 id="drawer-title">设备监测</h2></div><button id="drawer-close" aria-label="收起功能面板">‹</button></div><div id="drawer-content"></div><div class="drawer-footer">拖动右边界调节宽度 · Esc 收起</div><div id="drawer-resize" role="separator" tabindex="0" aria-label="调节面板宽度" aria-orientation="vertical" aria-valuemin="270" aria-valuemax="480" aria-valuenow="320"></div></aside>
+<main>
+<section class="page-intro"><div><span class="eyebrow">DIGITAL TWIN / CONSTRUCTION SAFETY</span><h1>工厂安全数字孪生<span class="title-tag">空间监测</span></h1></div><p>全景与不同工区一键切换。查看人员、设备与危险区域，跟踪空间进入报警。</p></section>
+<div class="live-strip" id="live-strip" role="status"><strong id="live-status"><i></i> 正在连接工厂后台</strong><span id="live-source">位置 / 设备 / 区域报警 · 同源订阅</span><span id="live-time">等待首帧数据</span></div>
+<div class="home-metrics" aria-label="A/B 工区台账概况"><div><span>工厂视图</span><strong>04</strong><small>外观 / 剖面 / 工区 A / 工区 B</small></div><div><span>设备监测</span><strong id="metric-devices">—</strong><small>与模型编号一致</small></div><div><span>编号人员</span><strong id="metric-people">—</strong><small>A/B 工区人员 · 空间联动</small></div><div><span>危险区域</span><strong id="metric-zones">—</strong><small>A/B 工区危险范围</small></div><div class="alert-metric"><span>当前进入报警</span><strong id="metric-alerts">—</strong><small>A/B 工区人员进入</small></div></div><nav class="view-tabs" aria-label="工厂场景视图">
+<button data-view="overview" aria-pressed="true"><span>01</span><strong>全景总视图</strong><small>统一厂区轮廓 · 纯建筑外观</small></button>
+<button data-view="a" aria-pressed="false"><span>02</span><strong>局部 A · 自动化装配</strong><small>高跨车间 / 机器人与输送线</small></button>
+<button data-view="b" aria-pressed="false"><span>03</span><strong>局部 B · 动力设备</strong><small>成套配电 / 换热水处理 / 控制侧翼</small></button>
+<button data-view="section" aria-pressed="false"><span>04</span><strong>厂区整体剖面</strong><small>A 装配 / B 动力 · 同屏展示</small></button>
+</nav>
+<div class="viewer-grid">
+<section class="scene-card" aria-label="交互三维工厂">
+<div class="scene-heading"><div><span id="view-code">OVERVIEW</span><h2 id="scene-title">工厂全景总视图</h2></div><button id="factory-reset">恢复视角</button></div>
+<div id="factory-stage" tabindex="-1" aria-label="工厂交互三维场景"><div id="loading" role="status">正在加载工业模型…</div>
+<div class="scene-caption" id="scene-caption"></div><div id="scene-alert" class="scene-alert" role="status" hidden></div>
+<div class="factory-detail" id="factory-detail" aria-live="polite" hidden><button id="factory-close" aria-label="关闭对象详情">×</button><span id="detail-id"></span><h3 id="detail-name"></h3><p id="detail-description"></p></div>
+<div class="scene-footer"><span>拖动旋转 · 滚轮缩放 · 悬停图标查看名称</span><span>尺寸与布局为设计示意</span></div>
 </div>
-<div class="stage-card">
-<div class="stage-toolbar"><h2>工地空间视图</h2><div class="view-switch" role="group" aria-label="显示模式"><button id="view-2d" type="button" aria-pressed="true" class="active">二维平面</button><button id="view-3d" type="button" aria-pressed="false">3D 场景</button><button id="reset-view" type="button">回到全景</button><button id="basemap" type="button" aria-pressed="false">卫星底图</button></div></div>
-<div class="stage-body">
-<div id="map" class="view" aria-label="二维工地地图"></div><div id="scene3d" class="view" aria-label="可旋转工地三维场景" hidden></div>
-<div id="view-note" class="view-note">圆点为人员，方块为设备；点击对象可查看详情。</div>
-<div id="scene-detail" class="scene-detail" aria-live="polite" hidden><button id="close-detail" type="button" aria-label="关闭详情">×</button><div id="detail-content"></div></div>
-<span class="compass" id="compass">↑ 北</span>
-</div>
-<div class="status-line"><b id="gis-status">空间服务：连接中</b><b id="device-status">电气服务：连接中</b><b id="snapshot-label"></b></div>
-</div>
-<p class="view-help" id="view-help">平面坐标按工地位置展示。卫星影像需要联网，关闭底图仍可查看全部业务图层。</p>
+<div class="simulation-controls" hidden><span class="simulation-label"><i></i> 区域进入演示</span><select id="demo-source" aria-label="移动演示对象"><option value="a">A 区 · 装配工</option><option value="b">B 区 · 电工</option></select><button id="demo-start">开始移动</button><button id="demo-stop" disabled>停止</button><button id="demo-reset">恢复初始位置</button><span id="demo-status" role="status">本地模拟位置</span></div><div class="scene-status"><span class="scene-legend"><b class="device-key">■</b> 设备 <b class="person-key">●</b> 人员 <b class="zone-key">◆</b> 危险区域</span><span><i></i> 本地三维场景</span><span id="asset-status">模型加载中</span><button id="factory-export">导出当前视图 PNG</button></div>
 </section>
-<aside class="sidebar">
-<section class="legend" aria-label="地图图例"><h2>图例 · 颜色与符号</h2><div class="legend-grid">
-<span class="legend-item"><i class="swatch high"></i>高风险</span><span class="legend-item"><i class="swatch medium"></i>中风险 / 需关注</span><span class="legend-item"><i class="swatch low"></i>低风险</span><span class="legend-item"><i class="swatch unknown"></i>过期 / 未知</span>
-<span class="legend-item"><i class="symbol person"></i>人员 / 人形</span><span class="legend-item"><i class="symbol device"></i>设备 / 箱体</span><span class="legend-item"><i class="symbol zone"></i>危险区域</span><span class="legend-item"><i class="symbol buffer"></i>安全缓冲区</span><span class="legend-item"><i class="symbol route"></i>巡检顺序</span>
-</div><p>灰色不能理解为安全。3D 高度及模型为演示示意，不代表实测建筑或 BIM。</p><details class="layer-options"><summary>图层显示（二维 / 3D 同步）</summary><div class="legend-grid"><label><input type="checkbox" data-layer="zones" checked>显示区域</label><label><input type="checkbox" data-layer="buffers" checked>显示缓冲区</label><label><input type="checkbox" data-layer="people" checked>显示人员</label><label><input type="checkbox" data-layer="devices" checked>显示设备</label><label><input type="checkbox" data-layer="route" checked>显示巡检线</label></div></details></section>
-<section class="sensor-panel" aria-label="定位联动演示"><h2>现场感知接入 <span class="sensor-badge">SIMULATION</span></h2><div class="sensor-controls"><select id="motion-mode" aria-label="模拟来源"><option value="phone">手机定位模拟</option><option value="camera">摄像头识别模拟</option></select><button id="motion-start">开始演示</button><button id="motion-stop" disabled>停止</button></div><canvas id="camera-preview" width="640" height="250" aria-label="模拟摄像头画面，非真实识别" hidden></canvas><p id="motion-status" role="status">未启动 · 合成轨迹通过接口上报，驱动地图人员移动。</p><p>非真实 GPS / 视频；场景建筑为设计示意。真实位置可接入上报接口。</p></section>
-<section class="panel">
-<div id="panel-tabs" class="tabs" role="tablist" aria-label="业务面板"><button id="tab-button-zones" class="tab active" role="tab" aria-selected="true" aria-controls="tab-zones" data-tab="zones">区域</button><button id="tab-button-devices" class="tab" role="tab" aria-selected="false" aria-controls="tab-devices" data-tab="devices">设备</button><button id="tab-button-assistant" class="tab" role="tab" aria-selected="false" aria-controls="tab-assistant" data-tab="assistant">助手</button></div>
-<div id="tab-zones" class="tab-content active" role="tabpanel" aria-labelledby="tab-button-zones"><p class="hint">人数只统计 120 秒内的有效位置。过期记录保留在图上并标灰。</p><div id="zone-list" class="empty">正在读取区域…</div></div>
-<div id="tab-devices" class="tab-content" role="tabpanel" aria-labelledby="tab-button-devices"><label for="device-filter">筛选设备</label><select id="device-filter"><option value="all">全部设备</option><option value="高">高风险</option><option value="中">中风险 / 需关注</option><option value="未知">过期 / 未知</option></select><p class="hint">点击“定位”可在二维与 3D 场景中定位同一设备。</p><div id="device-list">读取中…</div></div>
-<div id="tab-assistant" class="tab-content" role="tabpanel" aria-labelledby="tab-button-assistant"><div class="quick-actions"><button type="button" data-query="电气设备状态怎么样？">设备状态</button><button type="button" data-query="当前风险怎么样？">风险概览</button><button type="button" data-query="规划巡检路线">巡检顺序</button></div><form id="ask-form"><label for="route-start">巡检起点（覆盖全部设备）</label><select id="route-start"></select><label for="query">查询内容</label><input id="query" maxlength="1000" required value="电气设备状态怎么样？"><button id="ask-button" class="primary" type="submit" style="margin-top:10px">查询</button></form><p class="hint">巡检连线仅表示点间顺序，尚未校验围挡、道路与禁行区。</p><div id="answer" role="status" aria-live="polite"></div></div>
-</section></aside></main>
-<script src="vendor/leaflet/leaflet.js"></script><script src="config.js"></script><script src="ui-core.js"></script><script src="app.js?v=5"></script><script src="motion.js"></script><script src="shell.js?v=5"></script>
-<script src="management.js?v=5"></script></body></html>
+<aside class="inspection-panel"><span class="eyebrow">INSPECTION DIRECTORY</span><h2 id="directory-title">园区功能分区</h2><p id="directory-note">选择分区进入工区，查看具体设备。</p><div id="equipment-directory"></div><div class="panel-note"><span>模型来源</span><p>Kenney / CC0<br>ModKit / CC0<br>专项设备补充建模</p><a href="assets/factory/manifest.json" target="_blank" rel="noopener">查看资产来源清单 ↗</a></div></aside>
+</div>
+<section class="home-module" id="equipment-management" aria-labelledby="equipment-heading">
+<div class="module-heading"><div><span class="eyebrow">EQUIPMENT MONITORING</span><h2 id="equipment-heading">设备监测</h2></div><span id="equipment-total" class="module-count">加载场景台账…</span></div>
+<div class="table-tools"><label for="equipment-search">搜索设备<input id="equipment-search" aria-label="搜索设备" type="search" placeholder="设备编号 / 中文名称"></label><label for="equipment-area">所在工区<select id="equipment-area" aria-label="所在工区"><option value="all">全部工区</option><option value="a">A · 装配制造</option><option value="b">B · 动力设备</option></select></label><span>模型与台账共用编号</span></div>
+<div class="table-scroll"><table><thead><tr><th>设备编号</th><th>设备名称</th><th>所在工区</th><th>监测 / 进入状态</th><th>监测读数</th><th>操作</th></tr></thead><tbody id="equipment-rows"></tbody></table></div>
+<p class="module-note">后台每秒采样，页面自动同步；本页列出 A/B 工区设备与读数，传感器安全阈值待现场配置。</p></section>
+<div class="home-management-grid">
+<section class="home-module" id="personnel-management" aria-labelledby="personnel-heading"><div class="module-heading"><div><span class="eyebrow">NUMBERED PERSONNEL</span><h2 id="personnel-heading">人员管理</h2></div><span id="personnel-total" class="module-count"></span></div><div class="table-scroll"><table><thead><tr><th>人员编号</th><th>岗位</th><th>所在工区</th><th>区域状态</th><th>操作</th></tr></thead><tbody id="personnel-rows"></tbody></table></div><p class="module-note">本页仅列出 A/B 工区人员。工人、电工、焊工等角色逐一编号。红点表示进入危险区，绿点表示当前未进入限制范围；每条位置标注数据来源与采集时间，过期位置显示未知。</p></section>
+<section class="home-module" id="zone-management" aria-labelledby="zone-heading"><div class="module-heading"><div><span class="eyebrow">HAZARDOUS AREAS</span><h2 id="zone-heading">危险区域</h2></div><span id="zone-total" class="module-count"></span></div><div class="table-scroll"><table><thead><tr><th>区域编号</th><th>危险区域</th><th>所在视图</th><th>关联设备</th><th>操作</th></tr></thead><tbody id="zone-rows"></tbody></table></div><p class="module-note">橙红色透明范围与边线标出危险区域。全景仅展示建筑外观；人员、危险范围与定位在整体剖面及局部 A / B 查看，位置与告警来自同一后台观测。</p></section>
+</div><p id="home-status" role="status" aria-live="polite"></p>
+<section class="home-module" id="alarm-management" aria-labelledby="alarm-heading"><div class="module-heading"><div><span class="eyebrow">SPATIAL ALERTS</span><h2 id="alarm-heading">报警中心</h2></div><span id="alarm-total" class="module-count"></span></div><div id="alarm-list" class="alarm-list"></div><details class="event-history"><summary>进入 / 离开记录</summary><div id="alarm-history"></div></details><p class="module-note">按实体位置与危险范围计算，进入产生报警，离开自动解除。固定设备不因位于自身作业区而触发进入报警；区域边界与位置为演示设计。</p></section>
+<section id="dashboard-settings" hidden><div class="settings-group"><h3>板块调节</h3><label for="drawer-width">左侧面板宽度 <output id="drawer-width-value">320 px</output></label><input id="drawer-width" aria-label="面板宽度" type="range" min="270" max="480" value="320"><label for="scene-height">场景显示高度 <output id="scene-height-value">560 px</output></label><input id="scene-height" aria-label="场景高度" type="range" min="440" max="760" value="560"></div><div class="settings-group"><h3>图层显示</h3><label class="layer-toggle"><input type="checkbox" data-factory-layer="person" checked> 人员位置点与模型</label><label class="layer-toggle"><input type="checkbox" data-factory-layer="device" checked> 设备位置点与模型</label><label class="layer-toggle"><input type="checkbox" data-factory-layer="zone" checked> 危险区域范围</label><p>隐藏图层仍保留区域进入判断。</p></div></section>
+<section id="factory-analysis"></section>
+<footer>统一材质：混凝土灰 / 工业钢蓝 / 安全黄　 ·　 悬停展示设备中文名称，点击保留详情。<span id="scene-error" role="alert"></span></footer>
+</main>
+<dialog id="image-export"><div class="export-heading"><strong>当前场景配图</strong><button id="export-close" aria-label="关闭配图预览">×</button></div><img id="export-image" alt="当前工厂三维场景配图"><a id="export-download" download>保存 PNG 配图 ↓</a></dialog>
+<script type="module" src="factory-app.mjs?v=18"></script>
+<script type="module" src="factory-home.mjs?v=15"></script><script type="module" src="factory-panels.mjs?v=17"></script><script type="module" src="factory-analysis.mjs?v=18"></script><script type="module" src="workbench-navigation.mjs?v=17.1"></script></body></html>

@@ -1,0 +1,67 @@
+{
+  "type": "FeatureCollection",
+  "name": "danger_zones",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [120.0072, 30.2950],
+          [120.0088, 30.2950],
+          [120.0088, 30.2940],
+          [120.0072, 30.2940],
+          [120.0072, 30.2950]
+        ]]
+      },
+      "properties": {
+        "zone_id": "Z001",
+        "zone_type": "基坑",
+        "risk_level": "高",
+        "buffer_radius": 5,
+        "alert": "基坑危险区，禁止非授权人员靠近"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [120.0096, 30.2939],
+          [120.0104, 30.2939],
+          [120.0104, 30.2931],
+          [120.0096, 30.2931],
+          [120.0096, 30.2939]
+        ]]
+      },
+      "properties": {
+        "zone_id": "Z002",
+        "zone_type": "吊装区",
+        "risk_level": "中",
+        "buffer_radius": 10,
+        "alert": "吊装作业区，注意高空坠物"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [120.0075, 30.2914],
+          [120.0085, 30.2914],
+          [120.0085, 30.2906],
+          [120.0075, 30.2906],
+          [120.0075, 30.2914]
+        ]]
+      },
+      "properties": {
+        "zone_id": "Z003",
+        "zone_type": "高空区",
+        "risk_level": "高",
+        "buffer_radius": 8,
+        "alert": "高空作业区，必须佩戴安全带和安全绳"
+      }
+    }
+  ]
+}
