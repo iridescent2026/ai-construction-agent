@@ -23,7 +23,7 @@ def allowed_origins():
 
 def configure_api(app):
     origins = allowed_origins()
-    app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=['GET','POST','OPTIONS'],allow_headers=['Content-Type'])
+    app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=['GET','POST','OPTIONS'],allow_headers=['Content-Type','Authorization','X-Demo-Workspace'])
 
     @app.middleware('http')
     async def origin_guard(request,call_next):

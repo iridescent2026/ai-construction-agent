@@ -8,14 +8,16 @@ import copy
 import json
 import math
 import sqlite3
+from common.database import connect as database_connect
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from shapely.geometry import Polygon, LineString, box
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -52,6 +54,8 @@ class Edge(Strict):
     verified: bool = False
     reference: str = Field(default='', max_length=500)
     reviewer: str = Field(default='', max_length=80)
+    reviewScope: Literal['legacy', 'pending', 'prototype', 'recorded'] = 'legacy'
+    reviewedAt: str | None = None
 
     @model_validator(mode='after')
     def verified_evidence(self):
@@ -77,6 +81,11 @@ class WorkPlan(Strict):
     size: list[float] = Field(min_length=2, max_length=2)
     kind: str = Field(default='检修', max_length=30)
     source: str = 'manual'
+    floor: str | None = Field(default=None,max_length=80)
+    elevation: list[float] | None = Field(default=None,min_length=2,max_length=2)
+    polygon: list[list[float]] | None = Field(default=None,min_length=3,max_length=100)
+    trajectory: list[list[float]] | None = Field(default=None,min_length=2,max_length=100)
+    sweepRadius: float = Field(default=0,ge=0,le=500)
 
     @model_validator(mode='after')
     def validate_plan(self):
@@ -87,6 +96,15 @@ class WorkPlan(Strict):
             raise ValueError('工区或来源无效')
         if any(not math.isfinite(v) or abs(v) > 1000 for v in self.center) or any(not math.isfinite(v) or v <= 0 or v > 1000 for v in self.size):
             raise ValueError('范围应为有效的场景米坐标和正数尺寸')
+        if self.elevation is not None and (any(not math.isfinite(v) or abs(v)>1000 for v in self.elevation) or self.elevation[1]<=self.elevation[0]):raise ValueError('高度区间必须有限且上限高于下限')
+        for points in [self.polygon,self.trajectory]:
+            if points and any(len(p)!=2 or any(not math.isfinite(v) or abs(v)>1000 for v in p) for p in points):raise ValueError('面域与轨迹须使用有效 x/z 米坐标')
+        if self.polygon and self.trajectory:raise ValueError('面域与扫掠轨迹只能选择一种')
+        if self.polygon and (not Polygon(self.polygon).is_valid or Polygon(self.polygon).area<=0):raise ValueError('面域必须为有效且非零面积的多边形')
+        if self.trajectory and (self.sweepRadius<=0 or LineString(self.trajectory).length<=0):raise ValueError('扫掠轨迹须有长度及正数半径')
+        if self.polygon or self.trajectory:
+            shape=Polygon(self.polygon) if self.polygon else LineString(self.trajectory).buffer(self.sweepRadius)
+            x,z,X,Z=shape.bounds;self.center=[(x+X)/2,(z+Z)/2];self.size=[X-x,Z-z]
         return self
 
 
@@ -97,14 +115,14 @@ class Plans(Strict):
 class OrderCreate(Strict):
     entityId: str
     reason: str = Field(min_length=2, max_length=2000)
-    actor: str = Field(min_length=1, max_length=80)
+    actor: str = Field(default='account', min_length=1, max_length=80)
     source: Literal['manual','demo'] = 'manual'
 
 
 class OrderAction(Strict):
     action: str
     expectedVersion: int = Field(ge=1)
-    actor: str = Field(min_length=1, max_length=80)
+    actor: str = Field(default='account', min_length=1, max_length=80)
     assignee: str = Field(default='', max_length=80)
     note: str = Field(default='', max_length=3000)
     image: str | None = Field(default=None, max_length=2800000)
@@ -152,21 +170,28 @@ class Meters(Strict):
     readings: list[Meter] = Field(min_length=1, max_length=1000)
 
 
+def plan_shape(plan):
+    if plan.get('polygon'):return Polygon(plan['polygon'])
+    if plan.get('trajectory'):return LineString(plan['trajectory']).buffer(plan.get('sweepRadius',0))
+    x,z=plan['center'];w,d=plan['size'];return box(x-w/2,z-d/2,x+w/2,z+d/2)
 def conflicts(plans):
     results=[]
-    for index, left in enumerate(plans):
+    for index,left in enumerate(plans):
         for right in plans[index+1:]:
-            if left['view'] != right['view']:
-                continue
-            start=max(seconds(left['startsAt']), seconds(right['startsAt']))
-            end=min(seconds(left['endsAt']), seconds(right['endsAt']))
-            dx=min(left['center'][0]+left['size'][0]/2,right['center'][0]+right['size'][0]/2)-max(left['center'][0]-left['size'][0]/2,right['center'][0]-right['size'][0]/2)
-            dz=min(left['center'][1]+left['size'][1]/2,right['center'][1]+right['size'][1]/2)-max(left['center'][1]-left['size'][1]/2,right['center'][1]-right['size'][1]/2)
-            if end>start and dx>0 and dz>0:
-                results.append({'plans':[left['id'],right['id']], 'titles':[left['title'],right['title']],
-                    'view':left['view'], 'overlapSeconds':round(end-start), 'overlapAreaM2':round(dx*dz,2),
-                    'basis':'同工区矩形范围与时间交集；需人工确认，不代替作业许可',
-                    'source':'demo' if 'demo' in [left['source'],right['source']] else 'manual'})
+            if left['view']!=right['view']:continue
+            start=max(seconds(left['startsAt']),seconds(right['startsAt']));end=min(seconds(left['endsAt']),seconds(right['endsAt']))
+            if end<=start:continue
+            low=high=None;known=bool(left.get('elevation') and right.get('elevation'))
+            if known:
+                low=max(left['elevation'][0],right['elevation'][0]);high=min(left['elevation'][1],right['elevation'][1])
+                if high<=low:continue
+            area=plan_shape(left).intersection(plan_shape(right)).area
+            if area<=0:continue
+            results.append({'plans':[left['id'],right['id']],'titles':[left['title'],right['title']],'view':left['view'],'overlapSeconds':round(end-start),'overlapAreaM2':round(area,2),
+                'overlapHeightM':round(high-low,2) if known else None,'heightKnown':known,
+                'floors':[left.get('floor'),right.get('floor')],
+                'basis':'同工区面域/扫掠范围与时段交集；'+('包含已填写高度交集' if known else '高度未知，保留潜在冲突，不依据楼层名称排除')+'；矩形为默认范围，需人工确认，不代替作业许可',
+                'source':'demo' if 'demo' in [left['source'],right['source']] else 'manual'})
     return results
 
 
@@ -223,7 +248,7 @@ class AnalysisStore:
 
     @contextmanager
     def connect(self):
-        db=sqlite3.connect(self.path, timeout=10)
+        db=database_connect(self.path, timeout=10)
         try:
             with db:
                 yield db
@@ -243,7 +268,7 @@ class AnalysisStore:
             with self.lock,self.connect() as db:
                 db.execute('INSERT OR IGNORE INTO replay_frames(instance,revision,time,payload) VALUES(?,?,?,?)',
                     (data['instanceId'],data['revision'],data['updatedAt'],json.dumps(payload,ensure_ascii=False)))
-                db.execute('DELETE FROM replay_frames WHERE id < (SELECT MAX(id)-3599 FROM replay_frames)')
+                db.execute('DELETE FROM replay_frames WHERE id < (SELECT MAX(id)-'+str(179 if getattr(self.factory,'sandbox',False) else 3599)+' FROM replay_frames)')
             self.record_error=None
         except (sqlite3.Error,OSError) as error:
             self.record_error='回放记录失败：'+type(error).__name__
@@ -274,7 +299,7 @@ class AnalysisStore:
             'graph':graph,'plans':plans,'conflicts':conflicts(plans),'orders':orders,'orderCounts':counts,
             'meanClosureSeconds':round(sum(closed)/len(closed)) if closed else None,'energy':energy_summary(meters),
             'demoFeed':self.demo_feed.status() if hasattr(self,'demo_feed') else None,
-            'recordingError':self.record_error,'replayCount':len(self.replay()),'boundary':'本地演示；操作人姓名为自报，未建立账号权限。连接确认不能替代工程审查。'}
+            'recordingError':self.record_error,'replayCount':len(self.replay()),'boundary':'本地原型；新增工单操作由账号权限校验，历史自报记录仍保留。演示账号不能用于公开部署，连接确认不能替代工程审查。'}
 
     def graph(self,value: Graph):
         data=value.model_dump();ids={n['id'] for n in data['nodes']}
@@ -291,6 +316,13 @@ class AnalysisStore:
         data=self.factory.snapshot()
         with self.lock,self.connect() as db:
             graph=self.get(db,'graph',{});orders=self.get(db,'orders',[])
+        return self.impact_context(id,data,graph,orders)
+
+    def impact_context(self,id,data,graph,orders):
+        orders=copy.deepcopy(orders)
+        for order in orders:
+            if order.get('evidence'):
+                order['evidence']['imageAvailable']=bool(order['evidence'].pop('image',None))
         nodes={n['id']:n for n in graph.get('nodes',[])}
         if id not in nodes:raise HTTPException(404,'该实体尚未配置关联台账')
         seen={id};links=[]
@@ -307,7 +339,7 @@ class AnalysisStore:
         return {'root':id,'nodes':related,'edges':links,'people':people,
             'orders':[o for o in orders if o['entityId'] in seen],
             'basis':'双向关联查询，最多三跳；候选连接不证明故障传播。区域人员只取当前有效位置。',
-            'hasUnverified':any(not e['verified'] for e in links),'factoryRevision':data['revision']}
+            'hasUnverified':not links or any(not e['verified'] or e.get('reviewScope')!='recorded' for e in links),'factoryRevision':data['revision']}
 
     def exposure(self):
         with self.lock,self.connect() as db:
@@ -342,24 +374,29 @@ class AnalysisStore:
         with self.lock,self.connect() as db:self.put(db,'plans',items)
         return {'saved':True,'conflicts':conflicts(items)}
 
-    def create_order(self,value: OrderCreate):
+    def create_order(self,value: OrderCreate,context=None,transaction=None):
         if value.source=='demo' and not self.factory.demo_enabled:raise HTTPException(403,'真实模式禁止演示工单')
-        data=self.factory.snapshot();entity=next((e for e in data['entities'] if e['id']==value.entityId),None)
+        data=context['snapshot'] if context else self.factory.snapshot();entity=next((e for e in data['entities'] if e['id']==value.entityId),None)
         if not entity:raise HTTPException(404,'未知实体')
         if not value.actor.strip():raise HTTPException(422,'创建人不能为空')
         order={'id':'WO-'+uuid.uuid4().hex[:10].upper(),'entityId':value.entityId,'reason':value.reason,
             'status':'open','version':1,'createdAt':stamp(),'assignee':None,'evidence':None,'source':value.source,
             'trigger':{'factoryRevision':data['revision'],'entity':entity,'source':'联动演示' if value.source=='demo' else '人工发起'},
             'history':[{'action':'create','actor':value.actor.strip(),'time':stamp(),'note':value.reason}]}
-        with self.lock,self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');orders=self.get(db,'orders',[])
+        if context:
+            order['trigger']['workflowCase']=context['case']
+            order['trigger']['confirmedBy']=value.actor
+        with self.lock,(nullcontext(transaction) if transaction is not None else self.connect()) as db:
+            if transaction is None:db.execute('BEGIN IMMEDIATE')
+            orders=self.get(db,'orders',[])
             if len(orders)>=500:raise HTTPException(409,'本地工单达到500条，请先归档')
             orders.append(order);self.put(db,'orders',orders)
         return order
 
-    def action(self,id: str,command: OrderAction):
-        with self.lock,self.connect() as db:
-            db.execute('BEGIN IMMEDIATE');orders=self.get(db,'orders',[])
+    def action(self,id: str,command: OrderAction,transaction=None):
+        with self.factory.lock,self.lock,(nullcontext(transaction) if transaction is not None else self.connect()) as db:
+            if transaction is None:db.execute('BEGIN IMMEDIATE')
+            orders=self.get(db,'orders',[])
             order=next((o for o in orders if o['id']==id),None)
             if not order:raise HTTPException(404,'未知工单')
             if order['version']!=command.expectedVersion:raise HTTPException(409,'工单已被其他操作修改，请刷新后重试')
@@ -367,6 +404,17 @@ class AnalysisStore:
             if action=='assign' and state in ['open','assigned'] and command.assignee.strip():
                 order.update(status='assigned',assignee=command.assignee.strip())
             elif action=='start' and state=='assigned' and actor==order['assignee']:
+                plan=(order.get('trigger',{}).get('workflowCase') or {}).get('maintenancePlan')
+                if plan:
+                    from gis.factory_business import maintenance_check
+                    plans=self.get(db,'plans',[])
+                    if next((p for p in plans if p['id']==plan['id']),None)!=plan:
+                        raise HTTPException(409,'已确认计划被修改或移除，请安全员重新核查')
+                    if seconds(plan['startsAt'])>datetime.now(timezone.utc).timestamp():
+                        raise HTTPException(409,'尚未到候选计划开始时间')
+                    entity=next(e for e in self.factory.snapshot()['entities'] if e['id']==order['entityId'])
+                    checked=maintenance_check(entity,plan,plans,exclude_id=plan['id'])
+                    if checked['blocked']:raise HTTPException(409,'计划出现新冲突，不能开始；请安全员协调并重新核查')
                 order['status']='in_progress'
             elif action=='complete' and state=='in_progress' and actor==order['assignee'] and command.note.strip():
                 order.update(status='pending_review',completedBy=actor,evidence={'note':command.note,'image':command.image,'time':stamp()})
@@ -419,12 +467,36 @@ def install_analysis(app, factory):
     router.get('/replay')(store.replay)
     router.get('/replay/{id}')(store.frame)
     router.get('/exposure')(store.exposure)
-    router.post('/graph')(store.graph)
-    router.post('/plans')(store.plans)
-    router.post('/orders')(store.create_order)
-    router.post('/orders/{id}')(store.action)
-    router.get('/orders/{id}/image')(store.order_image)
-    router.post('/meters')(store.meters)
+    accounts=app.state.factory_accounts
+    @router.post('/graph')
+    def graph(value: Graph,request: Request):
+        user=accounts.require(request,{'safety','reviewer'})
+        if any(e.verified for e in value.edges):
+            accounts.require(request,{'reviewer'})
+        scope='prototype' if accounts.sandbox or user['id'].startswith('demo-') else 'recorded'
+        value=value.model_copy(update={'edges':[e.model_copy(update={'reviewer':user['id'],'reviewScope':scope,'reviewedAt':stamp()}) if e.verified else e.model_copy(update={'reviewScope':'pending','reviewedAt':None}) for e in value.edges]})
+        return store.graph(value)
+    @router.post('/plans')
+    def plans(value: Plans,request: Request):
+        accounts.require(request,{'safety'});return store.plans(value)
+    @router.post('/orders')
+    def create(value: OrderCreate,request: Request):
+        user=accounts.require(request,{'safety'})
+        return store.create_order(value.model_copy(update={'actor':user['id']}))
+    @router.post('/orders/{id}')
+    def action(id: str,value: OrderAction,request: Request):
+        roles={'assign':{'safety'},'reopen':{'safety'},'start':{'maintenance'},'complete':{'maintenance'},'approve':{'reviewer'},'reject':{'reviewer'}}
+        user=accounts.require(request,roles.get(value.action,set()))
+        if value.action=='assign':
+            assigned=accounts.user(value.assignee)
+            if not assigned or assigned['role']!='maintenance':raise HTTPException(422,'请指派有效的维修账号')
+        return store.action(id,value.model_copy(update={'actor':user['id']}))
+    @router.get('/orders/{id}/image')
+    def image(id: str,request: Request):
+        accounts.require(request);return store.order_image(id)
+    @router.post('/meters')
+    def meters(value: Meters,request: Request):
+        accounts.require(request,{'safety','collector'});return store.meters(value)
     app.include_router(router);app.state.factory_analysis=store
     store.record(factory.snapshot())
     return store

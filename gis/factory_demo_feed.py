@@ -59,8 +59,8 @@ class DemoFeed:
                         'startsAt':(clock-timedelta(minutes=2)).isoformat(),'endsAt':(clock+timedelta(minutes=45)).isoformat()})
                 self.analysis.plans(Plans(plans=plans))
                 if 'B-05' in self.devices and not any(o.get('source')=='demo' and o['entityId']=='B-05' and o['status']!='closed' for o in config['orders']):
-                    order=self.analysis.create_order(OrderCreate(entityId='B-05',reason='联动演示：泵组温升模拟，请核对候选供电和管廊连接；不代表现场故障。',actor='演示调度员',source='demo'))
-                    self.analysis.action(order['id'],OrderAction(action='assign',expectedVersion=order['version'],actor='演示调度员',assignee='演示维修员',note='演示派单，处理和复核必须手动完成'))
+                    order=self.analysis.create_order(OrderCreate(entityId='B-05',reason='联动演示：泵组温升模拟，请核对候选供电和管廊连接；不代表现场故障。',actor='demo-safety',source='demo'))
+                    self.analysis.action(order['id'],OrderAction(action='assign',expectedVersion=order['version'],actor='demo-safety',assignee='demo-maintenance',note='演示派单，处理和复核必须手动完成'))
                 # Clearly demo-labelled initial samples make the energy tab usable immediately.
                 recent=any(r.get('streamId')=='live-demo' and r['fresh'] and r['coverageSeconds']>0 for r in config['energy'])
                 for offset in ([0] if recent else [-60,-30,0]):self.sample(clock+timedelta(seconds=offset))

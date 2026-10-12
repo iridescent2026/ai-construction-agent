@@ -1,3 +1,4 @@
+import {InspectionWalk} from './inspection-walk.mjs';
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/three/OrbitControls.js';
 import {GLTFLoader} from './vendor/three/GLTFLoader.js';
@@ -7,8 +8,10 @@ import {layoutSectionLabels} from './factory-section-layout.mjs';
 import {buildFactorySite,updateFactorySite} from './factory-site-model.mjs';
 import {buildFactory,VIEWS} from './factory-model.mjs';
 import {DEMO_PATHS} from './factory-safety.mjs';
-import {watchFactory,factoryRequest,measurementText,freshFactory} from './factory-client.mjs';
-let stopSubscription,serverState,connected=false,replayFrame=null,liveLatest,highlightGroup,highlightNodes=[];
+import {watchFactory,factoryRequest,measurementText,freshFactory,observationSource} from './factory-client.mjs';
+import {factoryRefresh} from './factory-refresh.mjs';
+import {acceptsRevision} from './outdoor-data.mjs';
+let walk;let stopSubscription,serverState,connected=false,replayFrame=null,liveLatest,highlightGroup,highlightNodes=[];
 const embedded=window.parent!==window&&new URLSearchParams(location.search).has('embed');
 const referenceArea=new URLSearchParams(location.search).get('referenceArea');
 
@@ -26,7 +29,7 @@ function paintDetail(){
     $('factory-detail').classList.toggle('risk-detail',info.riskState==='danger');$('detail-id').textContent=info.id;$('detail-name').textContent=info.title;
     const risk=info.riskState==='danger'?`进入危险区域：${info.currentZones.join('、')}。`:info.riskState==='unknown'?'位置未知，保留上次区域记录。':info.riskState==='clear'?'当前未进入限制区域。':'';
     const position=(info.kind==='person'||info.mobile)&&Number.isFinite(info.anchor[0])&&Number.isFinite(info.anchor[2])?`场景位置：${info.anchor[0].toFixed(1)} m / ${info.anchor[2].toFixed(1)} m。`:'';
-    const source=info.positionSource==='telemetry'?'接口定位':'演示定位',observed=info.positionTimestamp?`采集 ${new Date(info.positionTimestamp).toLocaleTimeString('zh-CN',{hour12:false})} · ${source}。`:'';
+    const source=observationSource(info,'position'),observed=info.positionTimestamp?`采集 ${new Date(info.positionTimestamp).toLocaleTimeString('zh-CN',{hour12:false})} · ${source}。`:'';
     $('detail-description').textContent=(!connected&&stopSubscription?'后台断连，以下为最后观测。':'')+risk+position+(info.kind==='device'?measurementText(info,replayFrame?.updatedAt)+'。':'')+observed+info.text.replace('（模拟位置）','').replace('本地模拟位置，','');
 }
 function entities(model=root){return [...(model.userData.locations||[]),...(model.userData.devices||[]),...(model.userData.people||[]),...(model.userData.zones||[])];}
@@ -35,7 +38,7 @@ function markerTitle(info){return info.title.startsWith(info.id+' ·')?info.titl
 function markerColor(info){return info.riskState==='unknown'?'#98a1ac':info.riskState==='danger'?'#ff6868':info.kind==='zone'?'#f18e65':info.kind==='person'?'#66d4b3':'#e8ac42';}
 function worldAnchor(info){return info.anchor;}
 function visibleEntities(){return (['overview','section'].includes(current)?[]:entities()).filter(info=>layers[info.kind]!==false);}
-function focusEntity(info){const point=new THREE.Vector3(...worldAnchor(info));controls.minDistance=8;controls.enableDamping=false;controls.target.copy(point);camera.position.copy(point).add(new THREE.Vector3(12,18,22));controls.update();controls.enableDamping=true;stage.dataset.focusedEntity=info.id;}
+function focusEntity(info){walk?.exit();const point=new THREE.Vector3(...worldAnchor(info));controls.minDistance=8;controls.enableDamping=false;controls.target.copy(point);camera.position.copy(point).add(new THREE.Vector3(12,18,22));controls.update();controls.enableDamping=true;stage.dataset.focusedEntity=info.id;}
 
 function refreshMarkers(){
     if(!root||!markers)return;markers.begin();for(const info of visibleEntities()){const record=markers.set(info.id,markerTitle(info),info,markerColor(info));record.node.classList.toggle('selected',info.id===selected?.id);record.node.classList.toggle('danger',info.riskState==='danger');}markers.end();
@@ -80,8 +83,8 @@ function fitView(){
     controls.enableDamping=false;controls.target.copy(target);controls.update();controls.enableDamping=true;
     controls.minDistance=['overview','section'].includes(current)?65:17;controls.maxDistance=['overview','section'].includes(current)?800:230;
 }
-function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();if(ready&&root){if(stage.dataset.focusedEntity&&selected)focusEntity(selected);else fitView();}}
-function switchView(view){if(highlightGroup){scene.remove(highlightGroup);highlightGroup.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});highlightGroup=null;}
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();if(ready&&root&&!walk?.active){if(stage.dataset.focusedEntity&&selected)focusEntity(selected);else fitView();}}
+function switchView(view){walk?.exit();if(highlightGroup){scene.remove(highlightGroup);highlightGroup.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});highlightGroup=null;}
     if(!VIEW_CONFIG[view]||!ready)return;
     markers.clearPreview();selected=null;preview=null;paintDetail();if(root)scene.remove(root);current=view;
     root=siteModels.get(view)||cache.get(view);scene.add(root);
@@ -108,7 +111,7 @@ function layout(){
     markers.layout(placeLabels(items,w,h,43,54),w,h);
     layoutSectionLabels(areaLabels,camera,w,h);
 }
-function render(){if(disposed)return;frame=requestAnimationFrame(render);controls.update();renderer.render(scene,camera);layout();}
+function render(){if(disposed)return;frame=requestAnimationFrame(render);if(walk?.active)walk.update();else controls.update();renderer.render(scene,camera);layout();}
 async function start(){
     scene=new THREE.Scene();scene.background=new THREE.Color('#1d3039');scene.fog=new THREE.Fog('#1d3039',500,950);
     camera=new THREE.PerspectiveCamera(40,1,.1,1200);renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
@@ -118,7 +121,7 @@ async function start(){
     const sun=new THREE.DirectionalLight(0xffe8c8,3.3);sun.position.set(-70,140,70);sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);Object.assign(sun.shadow.camera,{left:-105,right:105,top:105,bottom:-105,near:1,far:320});sun.shadow.normalBias=.1;sun.shadow.bias=-.0003;scene.add(sun);
     lights.sun=sun;
     const fill=new THREE.DirectionalLight(0xa8c7e0,1.1);fill.position.set(80,70,-90);scene.add(fill);
-    areaLabelLayer=document.createElement('div');areaLabelLayer.className='section-area-labels';stage.append(areaLabelLayer);markers=new SceneMarkers(stage,select,detail);resize();new ResizeObserver(resize).observe(stage);
+    areaLabelLayer=document.createElement('div');areaLabelLayer.className='section-area-labels';stage.append(areaLabelLayer);markers=new SceneMarkers(stage,select,detail);walk=new InspectionWalk({camera,controls,renderer,container:stage,getRoot:()=>root,getInfo:()=>selected});resize();new ResizeObserver(resize).observe(stage);
     const loader=new GLTFLoader(),names=['building-a.glb','building-k.glb','building-r.glb','tank.glb','pipe.glb','barrel.glb','pallet.glb','railing.glb','industrial-pipes.gltf','wall-vent.glb'];
     const loaded=await Promise.allSettled(names.map(async name=>{const gltf=await loader.loadAsync(`assets/factory/${name}`);assets.set(name,gltf.scene);}));
     const failures=loaded.filter(r=>r.status==='rejected').length;
@@ -130,15 +133,15 @@ async function start(){
     for(const info of catalog())if(info.kind==='person'||info.mobile){info.riskState='unknown';info.currentZones=[];}
     ready=true;switchView(embedded&&['a','b'].includes(referenceArea)?referenceArea:'overview');$('loading').hidden=true;render();
     window.FactoryTwin={
-        catalog,safetySnapshot:()=>snapshot,startDemo,stopDemo,resetDemo,switchView,
+        catalog,safetySnapshot:()=>snapshot,enterInspection(id){const info=catalog().find(e=>e.id===id);if(info&&current!==info.view)switchView(info.view);if(info)select(info);walk.enter(info);},exitInspection(){walk.exit();},startDemo,stopDemo,resetDemo,switchView,
         async updatePosition(id,{x,z}){if(replayFrame)throw new Error('请先返回实时再上报位置');const data=await factoryRequest('/observations',{observations:[{id,x,z}]});applyState(data);return true;},
         setLayer(kind,enabled){if(!(kind in layers))return;layers[kind]=enabled;for(const model of cache.values())for(const info of entities(model))if(info.kind===kind)model.getObjectByName(info.id).visible=enabled;updateFactorySite(siteModels.get('section'),serverState,layers);refreshMarkers();},
         locate(id){const info=catalog().find(item=>item.id===id);if(!info)return false;if(layers[info.kind]===false){this.setLayer(info.kind,true);window.dispatchEvent(new CustomEvent('factory-layer-change',{detail:{kind:info.kind,enabled:true}}));}select(info);focusEntity(info);refreshMarkers();document.querySelector('.scene-card').scrollIntoView({behavior:'smooth',block:'start'});return true;}
     };
     evaluateSafety();
+    const inspection=new URLSearchParams(location.search).get('inspect');if(inspection)setTimeout(()=>{try{window.FactoryTwin.enterInspection(inspection);}catch(e){$('scene-error').textContent=e.message;}},0);
     window.dispatchEvent(new Event('factory-ready'));
     if(embedded){stopSubscription=()=>{};window.parent.postMessage({type:'factory-frame-ready'},location.origin);}else stopSubscription=watchFactory(applyState,disconnect);
-    $('data-refresh')?.addEventListener('click',async()=>{try{applyState(await factoryRequest());}catch(error){disconnect(error);}});
     // Raycast body selection is supplementary; labels remain the primary hover target.
     let down;renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
     renderer.domElement.addEventListener('pointerup',e=>{
@@ -151,7 +154,8 @@ async function start(){
     });
 }
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>switchView(b.dataset.view)));
-$('factory-reset').addEventListener('click',()=>{delete stage.dataset.focusedEntity;markers?.clearPreview();fitView();});
+$('factory-inspect')?.addEventListener('click',()=>{try{if(['overview','section'].includes(current))switchView('b');walk.enter(selected);}catch(e){$('scene-error').textContent=e.message;}});
+$('factory-reset').addEventListener('click',()=>{walk?.exit();delete stage.dataset.focusedEntity;markers?.clearPreview();fitView();});
 $('factory-export').addEventListener('click',()=>{
     if(!renderer||!root)return;
     // Render a 16:9 deliverable independently of the dashboard window size.
@@ -171,11 +175,11 @@ $('factory-export').addEventListener('click',()=>{
     const url=canvas.toDataURL('image/png');$('export-image').src=url;$('export-download').href=url;$('export-download').download=`工厂场景-${current}.png`;$('image-export').showModal();
 });
 $('export-close').addEventListener('click',()=>$('image-export').close());
-window.addEventListener('pagehide',event=>{if(event.persisted)return;disposed=true;stopSubscription?.();cancelAnimationFrame(frame);controls?.dispose();markers?.dispose();const geometries=new Set(),materials=new Set(),textures=new Set();for(const object of [...cache.values(),...siteModels.values(),...assets.values()])object.traverse(o=>{if(o.geometry)geometries.add(o.geometry);for(const m of [].concat(o.material||[])){materials.add(m);for(const value of Object.values(m))if(value?.isTexture)textures.add(value);}if(o.isInstancedMesh)o.dispose();});geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());renderer?.dispose();});
-function applyState(data, historical=false){if(!historical){liveLatest=data;if(replayFrame)return;}
+window.addEventListener('pagehide',event=>{if(event.persisted)return;disposed=true;stopSubscription?.();cancelAnimationFrame(frame);walk?.dispose();controls?.dispose();markers?.dispose();const geometries=new Set(),materials=new Set(),textures=new Set();for(const object of [...cache.values(),...siteModels.values(),...assets.values()])object.traverse(o=>{if(o.geometry)geometries.add(o.geometry);for(const m of [].concat(o.material||[])){materials.add(m);for(const value of Object.values(m))if(value?.isTexture)textures.add(value);}if(o.isInstancedMesh)o.dispose();});geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());renderer?.dispose();});
+function applyState(data, historical=false){if(!historical){if(!acceptsRevision(liveLatest,data))return;liveLatest=data;if(replayFrame)return;}
     if(!ready||!data.entities)return;serverState=data;connected=true;
     const byId=new Map(catalog().map(info=>[info.id,info]));
-    for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote'])info[key]=record[key];}
+    for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote','measurementProvenance','positionProvenance'])info[key]=record[key];}
     snapshot={active:data.active.filter(a=>a.view!=='overview'),events:data.events.filter(e=>e.view!=='overview'),added:[],people:catalog().filter(e=>e.kind==='person').length};
     stage.dataset.revision=data.revision;renderer.shadowMap.needsUpdate=true;evaluateSafety();
     window.dispatchEvent(new CustomEvent('factory-data-update',{detail:data}));
@@ -186,7 +190,7 @@ function updateConnection(error){
     $('live-strip')?.classList.toggle('disconnected',!connected);
     if($('live-status'))$('live-status').textContent=replayFrame?'● 历史回放 · 非当前状态':connected?'● 工厂后台已连接 · 自动同步':'● 数据断连 · 当前状态未知';
     if($('live-time'))$('live-time').textContent=serverState?`版本 ${serverState.revision} / ${new Date(serverState.updatedAt).toLocaleTimeString('zh-CN',{hour12:false})}`:'等待首帧数据';
-    if($('live-source')){const actual=serverState?.entities.filter(e=>e.view!=='overview'&&(e.positionSource==='telemetry'||e.measurementSource==='telemetry')).length||0;$('live-source').textContent=actual?`${actual} 个接口上报实体 · 其余为后台演示`:'后台演示数据 · 未接现场传感器';}
+    if($('live-source')){const actual=serverState?.entities.filter(e=>e.view!=='overview'&&(e.positionSource==='telemetry'||e.measurementSource==='telemetry')).length||0;$('live-source').textContent=actual?`${actual} 个接口导入实体（可含手动测试） · 其余为后台演示`:'后台演示数据 · 未接现场传感器';}
     $('asset-status').textContent=connected?`${assets.size} / 10 资产 · 同源观测 v${serverState.revision}`:'后台断连 · 保留最后模型';
     if(error&&$('home-status'))$('home-status').textContent=error.message;
 }
@@ -196,5 +200,6 @@ window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==
 window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.type!=='factory-gis'||!ready)return;if(e.data.action==='reference-reset'&&embedded&&['a','b'].includes(referenceArea)){switchView(referenceArea);fitView();}});
 start().catch(error=>{$('loading').textContent='三维场景加载失败，请刷新重试。';$('scene-error').textContent=error.message;console.error(error);});
 
+factoryRefresh.register('空间观测与列表',{apply:applyState,offline:disconnect});
 window.addEventListener('analysis-replay',e=>{if(!ready)return;replayFrame=e.detail.data;document.body.classList.toggle('replay-mode',!!replayFrame);if(replayFrame)applyState(replayFrame,true);else if(liveLatest)applyState(liveLatest);});
 window.addEventListener('analysis-highlight',e=>{if(!ready)return;const nodes=e.detail.nodes||[],device=catalog().find(i=>i.id===e.detail.root)||nodes.map(n=>catalog().find(i=>i.id===n.id)).find(Boolean);if(!device)return;switchView(device.view);if(highlightGroup){scene.remove(highlightGroup);highlightGroup.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});}highlightGroup=new THREE.Group();for(const node of nodes){const object=root.getObjectByName(node.modelGroup||node.id);if(!object)continue;object.updateWorldMatrix(true,true);const helper=new THREE.Box3Helper(new THREE.Box3().setFromObject(object),0xe8bc61);helper.material.depthTest=false;helper.renderOrder=100;highlightGroup.add(helper);}scene.add(highlightGroup);document.querySelector('.scene-card')?.scrollIntoView({behavior:'smooth',block:'start'});});

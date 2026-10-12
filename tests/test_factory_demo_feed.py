@@ -58,8 +58,9 @@ def test_autostart_routes_and_two_clients_share_one_stream(tmp_path,monkeypatch)
     monkeypatch.setenv('FACTORY_DB_PATH',str(tmp_path/'http.db'));monkeypatch.setenv('FACTORY_ANALYSIS_DEMO','1')
     app=FastAPI();install_factory(app)
     with TestClient(app) as client:
+        headers={'Authorization':'Bearer '+client.post('/factory/auth/login',json={'username':'demo-safety','password':'SafetyDemo!2026'}).json()['token']}
         first=client.get('/factory/analysis').json();assert first['demoFeed']['running']
-        again=client.post('/factory/analysis/demo-feed',json={'action':'start'}).json()
+        again=client.post('/factory/analysis/demo-feed',json={'action':'start'},headers=headers).json()
         assert again['startedAt']==first['demoFeed']['startedAt']
-        assert client.post('/factory/analysis/demo-feed',json={'action':'stop'}).status_code==200
+        assert client.post('/factory/analysis/demo-feed',json={'action':'stop'},headers=headers).status_code==200
         assert not client.get('/factory/analysis').json()['demoFeed']['running']

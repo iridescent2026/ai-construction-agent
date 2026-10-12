@@ -9,6 +9,7 @@ import json
 import math
 import os
 import sqlite3
+from common.database import connect as database_connect
 import threading
 import time
 import uuid
@@ -16,7 +17,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from common.runtime import is_fresh
 from gis.imagery import SITE, imagery_metadata
@@ -91,7 +92,7 @@ class FactoryStore:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
-        with sqlite3.connect(self.path) as db:
+        with database_connect(self.path) as db:
             db.execute('CREATE TABLE IF NOT EXISTS factory_state (id INTEGER PRIMARY KEY, payload TEXT NOT NULL)')
             row = db.execute('SELECT payload FROM factory_state WHERE id=1').fetchone()
         self.data = json.loads(row[0]) if row else {'revision':0,'entities':copy.deepcopy(CATALOG['entities']),'events':[],'active':[],'sequence':0,'demo':None}
@@ -101,7 +102,7 @@ class FactoryStore:
             for entity in revised:
                 observed = previous.get(entity['id'], {})
                 for key in ['riskState', 'currentZones', 'positionSource', 'positionTimestamp',
-                            'measurements', 'measurementSource', 'measurementTimestamp']:
+                            'measurements', 'measurementSource', 'measurementTimestamp', 'measurementProvenance', 'positionProvenance']:
                     if key in observed:
                         entity[key] = copy.deepcopy(observed[key])
                 # A layout update may relocate demo actors, but never overwrites
@@ -121,7 +122,7 @@ class FactoryStore:
     def save(self):
         self.data['revision'] += 1
         self.data['updatedAt'] = now_iso()
-        with sqlite3.connect(self.path) as db:
+        with database_connect(self.path) as db:
             db.execute('INSERT OR REPLACE INTO factory_state VALUES(1,?)', (json.dumps(self.data, ensure_ascii=False),))
 
     def evaluate(self):
@@ -197,7 +198,7 @@ class FactoryStore:
             data['site']=copy.deepcopy(SITE)
             return data
 
-    def observe(self, batch):
+    def observe(self, batch, provenance=None):
         with self.lock:
             by_id={e['id']:e for e in self.data['entities']}
             # Validate the entire batch before any mutation.
@@ -220,11 +221,13 @@ class FactoryStore:
                 if o.x is not None:
                     e['anchor'][0],e['anchor'][2]=o.x,o.z
                     e.update(positionTimestamp=observed,positionSource='telemetry')
+                    e['positionProvenance']=copy.deepcopy(provenance or {'kind':'manual','actor':None})
                     if self.data['demo'] and o.id in [p['id'] for p in demo_paths(self.data['demo']['key'])]:
                         self.data['demo']=None
                 if o.measurements:
                     e.pop('measurementNote',None)
                     e.update(measurements={k:m.model_dump() for k,m in o.measurements.items()},measurementTimestamp=observed,measurementSource='telemetry')
+                    e['measurementProvenance']=copy.deepcopy(provenance or {'kind':'manual','actor':None})
             self.evaluate();self.save()
             return self.snapshot()
 
@@ -254,9 +257,13 @@ class FactoryStore:
             return self.snapshot()
 
 
-def install_factory(app):
+def install_factory(app,path_override=None,sandbox=False):
     default=Path(os.getenv('GIS_DB_PATH',str(Path(__file__).with_name('data.db')))).with_suffix('.factory.db')
-    store=FactoryStore(os.getenv('FACTORY_DB_PATH',str(default)))
+    store=FactoryStore(path_override or os.getenv('FACTORY_DB_PATH',str(default)))
+    store.sandbox=sandbox
+    from gis.factory_accounts import Accounts
+    accounts=Accounts(store.path.with_suffix('.accounts.db'),store.demo_enabled,sandbox=sandbox)
+    accounts.install(app);app.state.factory_accounts=accounts
     from gis.factory_analysis import install_analysis
     analysis=install_analysis(app,store)
     from gis.factory_demo_feed import DemoFeed,FeedCommand
@@ -272,15 +279,19 @@ def install_factory(app):
         return imagery_metadata(refresh)
 
     @router.post('/observations')
-    def observations(batch:Batch):
-        data=store.observe(batch);analysis.record(data);return data
+    def observations(batch:Batch,request:Request):
+        user=accounts.require(request,{'safety','maintenance','collector'})
+        provenance={'kind':'authenticated_import' if user['role']=='collector' else 'manual','actor':user['id'],'receivedAt':now_iso()}
+        data=store.observe(batch,provenance);analysis.record(data);return data
 
     @router.post('/demo')
-    def demo(command:DemoCommand):
+    def demo(command:DemoCommand,request:Request):
+        accounts.require(request,{'safety'})
         data=store.command(command);analysis.record(data);return data
 
     @router.post('/analysis/demo-feed')
-    def demo_feed(command:FeedCommand):
+    def demo_feed(command:FeedCommand,request:Request):
+        accounts.require(request,{'safety'})
         return feed.command(command)
 
     async def sampler():
@@ -289,6 +300,7 @@ def install_factory(app):
             await asyncio.to_thread(store.tick)
             await asyncio.to_thread(feed.tick)
             await asyncio.to_thread(analysis.record,store.snapshot())
+            if not sandbox and hasattr(app.state,'workspaces'):await asyncio.to_thread(app.state.workspaces.tick)
 
     previous_lifespan=app.router.lifespan_context
 
@@ -314,3 +326,21 @@ def install_factory(app):
 
     app.include_router(router)
     app.state.factory=store
+    from gis.factory_business import install_business
+    install_business(app,store,analysis,accounts)
+    from gis.factory_workflow import install_workflow
+    install_workflow(app,store,analysis,accounts)
+
+    from gis.factory_operations import install_operations
+    install_operations(app,store,analysis,accounts)
+    if not sandbox:
+        from gis.factory_workspaces import install_workspaces
+        install_workspaces(app,store)
+    else:
+        from fastapi.responses import JSONResponse
+        @app.middleware('http')
+        async def authenticated_space(request,call_next):
+            if request.method!='OPTIONS' and request.url.path.startswith('/factory') and request.url.path not in ('/factory/auth/login','/factory/auth/mode'):
+                try:await asyncio.to_thread(accounts.require,request)
+                except HTTPException as error:return JSONResponse({'detail':error.detail},status_code=error.status_code)
+            return await call_next(request)

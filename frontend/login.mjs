@@ -1,0 +1,15 @@
+import {factoryBase,setFactorySession} from './factory-client.mjs';
+const $=id=>document.getElementById(id);let mode;
+const roles=[['demo-safety','SafetyDemo!2026','安全员'],['demo-maintenance','RepairDemo!2026','维修员'],['demo-reviewer','ReviewDemo!2026','复核员'],['demo-admin','AdminDemo!2026','演示管理员']];
+async function space(){let value=sessionStorage.getItem('factory-workspace');if(value)return value;
+ const response=await fetch(factoryBase+'/factory/auth/demo-session',{method:'POST'});const data=await response.json();if(!response.ok)throw new Error(data.detail||'演示空间创建失败');sessionStorage.setItem('factory-workspace',data.workspace);return data.workspace;}
+async function login(username,password){let workspace=sessionStorage.getItem('factory-workspace');if($('entry-official').checked){workspace=null;sessionStorage.removeItem('factory-workspace');}else if(mode?.demoAccounts)workspace=await space();
+ const response=await fetch(factoryBase+'/factory/auth/login',{method:'POST',headers:{'Content-Type':'application/json',...(workspace?{'X-Demo-Workspace':workspace}:{})},body:JSON.stringify({username,password})});const data=await response.json();if(!response.ok){if(response.status===401&&String(data.detail).includes('空间'))sessionStorage.removeItem('factory-workspace');throw new Error(data.detail||'登录失败');}
+ setFactorySession(data);$('entry-password').value='';const next=new URLSearchParams(location.search).get('next');let destination='./';try{const url=new URL(next||'/',location.origin);if(url.origin===location.origin&&['/','/index.html','/workbench.html','/factory.html'].includes(url.pathname))destination=url.pathname+url.search+url.hash;}catch{}location.replace(destination);}
+async function run(action){$('entry-submit').disabled=true;$('entry-status').textContent='正在验证账号…';try{await action();}catch(e){$('entry-status').textContent=e.message;}finally{$('entry-submit').disabled=false;}}
+$('entry-login').addEventListener('submit',e=>{e.preventDefault();run(()=>login($('entry-username').value.trim(),$('entry-password').value));});
+$('entry-guest').addEventListener('click',()=>{$('entry-official').checked=false;run(()=>login('demo-observer','ObserveDemo!2026'));});
+$('entry-new').addEventListener('click',()=>{sessionStorage.removeItem('factory-workspace');setFactorySession(null);$('entry-status').textContent='下一次演示登录将创建新空间；旧空间24小时后失效。';});
+try{const response=await fetch(factoryBase+'/factory/auth/mode',{cache:'no-store'});if(!response.ok)throw new Error('登录服务暂不可用');mode=await response.json();$('login-project').textContent=mode.project;$('entry-storage').textContent=mode.storage?.durable?'外部持久存储已配置；个人演示空间有效24小时。':'当前为临时存储演示，请导出需要保留的结果。';$('entry-demo').hidden=!mode.demoAccounts;
+ for(const [id,password,title] of roles){const b=document.createElement('button');b.type='button';b.textContent='填入'+title+'演示账号';b.onclick=()=>{$('entry-official').checked=false;$('entry-username').value=id;$('entry-password').value=password;$('entry-status').textContent='已填入，请点击登录。';};$('entry-roles').append(b);}
+}catch(e){$('entry-status').textContent=e.message;}

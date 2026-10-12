@@ -48,9 +48,11 @@ def test_layout_migration_updates_demo_positions_but_preserves_telemetry(store):
     assert migrated['catalogRevision']==CATALOG['catalogRevision']
     assert by_id['P014']['anchor'][::2]==[-30,-15]
     assert by_id['P014']['positionSource']=='telemetry'
+    assert by_id['P014']['positionProvenance']['kind']=='manual'
     assert by_id['P020']['anchor']==canonical['P020']['anchor']
     assert by_id['Z005']['center']==canonical['Z005']['center']
     assert by_id['B-03']['measurements']['pressure']['value']==.62
+    assert by_id['B-03']['measurementProvenance']['kind']=='manual'
 
 
 def test_position_entry_exit_and_telemetry_not_overwritten(store):
@@ -119,6 +121,8 @@ def test_factory_http_subscription_and_lifespan(tmp_path,monkeypatch):
     monkeypatch.setenv('FACTORY_DB_PATH',str(tmp_path/'api.db'))
     app=FastAPI();configure_api(app);install_factory(app)
     with TestClient(app) as client:
+        token=client.post('/factory/auth/login',json={'username':'demo-safety','password':'SafetyDemo!2026'}).json()['token']
+        client.headers['Authorization']='Bearer '+token
         first=client.get('/factory/state').json()
         time.sleep(1.1)
         latest=client.get('/factory/state').json()
@@ -134,5 +138,7 @@ def test_factory_origin_guard(tmp_path,monkeypatch):
     monkeypatch.setenv('FACTORY_DB_PATH',str(tmp_path/'guard.db'))
     app=FastAPI();configure_api(app);install_factory(app)
     with TestClient(app) as client:
+        token=client.post('/factory/auth/login',json={'username':'demo-safety','password':'SafetyDemo!2026'}).json()['token']
+        client.headers['Authorization']='Bearer '+token
         blocked=client.post('/factory/demo',json={'action':'start'},headers={'Origin':'https://unrelated.example'})
         assert blocked.status_code==403
