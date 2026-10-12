@@ -22,6 +22,6 @@ $('experiment-summary').onclick=e=>run(e.target,async()=>download(await factoryR
 $('account-audit').onclick=e=>run(e.target,async()=>{$('account-audit-text').textContent=JSON.stringify(await factoryRequest('/auth/audit'),null,2);});
 window.addEventListener('factory-auth-change',()=>{if(!factorySession())location.replace('login.html?next='+encodeURIComponent(location.pathname));else run(null,tasks);});
 factoryRefresh.register('个人待办',{read:tasks});
-try{const user=await factoryRequest('/auth/me');setFactorySession({...factorySession(),user});await tasks();}catch(e){if(e.status===401||e.status===403)location.replace('login.html');else $('my-task-status').textContent=e.message;}
+try{const user=await factoryRequest('/auth/me');paint(user);setFactorySession({...factorySession(),user});await tasks();}catch(e){if(e.status===401||e.status===403)location.replace('login.html');else $('my-task-status').textContent=e.message;}
 
 $('storage-proof').onclick=e=>run(e.target,async()=>{const result=await factoryRequest('/operations/storage-proof',{});$('storage-proof-result').textContent='记录 '+result.proof.id+' · '+result.storage.backend+' · '+(result.retainedAfterRestart?'已读回其他服务进程创建的原记录':'已保存，服务重启后再点击核验');});

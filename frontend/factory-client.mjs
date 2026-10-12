@@ -4,7 +4,19 @@ export function setFactorySession(value){if(value)globalThis.sessionStorage?.set
 export function observationSource(info,field='measurement'){if(info[field+'Source']==='demo')return '后台模拟';const kind=info[field+'Provenance']?.kind;return kind==='manual'?'手动测试导入':kind==='authenticated_import'?'采集账号导入（设备未核验）':info[field+'Source']==='telemetry'?'旧接口记录（来源未核验）':'未接入';}
 export async function factoryRequest(path='/state',body){
     const session=factorySession(),headers={...(body?{'Content-Type':'application/json'}:{}),...(session?.token?{Authorization:'Bearer '+session.token}:{}),...(globalThis.sessionStorage?.getItem('factory-workspace')?{'X-Demo-Workspace':sessionStorage.getItem('factory-workspace')}:{})};
-    const response=await fetch(`${factoryBase}/factory${path}`,{cache:'no-store',signal:AbortSignal.timeout(6000),headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});
+    let response;
+    for(let attempt=0;attempt<(body?1:2);attempt++){
+        try{
+            response=await fetch(`${factoryBase}/factory${path}`,{cache:'no-store',signal:AbortSignal.timeout(18000),headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});
+            if(!body&&response.status===503&&attempt===0)continue;
+            break;
+        }catch(error){
+            const transient=['TimeoutError','AbortError','TypeError'].includes(error.name);
+            if(!body&&transient&&attempt===0)continue;
+            if(transient)throw new Error(body?'提交请求等待超时，请刷新核对是否已保存后再决定重试。':'网络响应较慢，请点击刷新数据重试。');
+            throw error;
+        }
+    }
     if(response.status===401&&path!=='/auth/login')setFactorySession(null);
     if(!response.ok){let message=`后台请求失败 ${response.status}`;try{const detail=(await response.json()).detail;message=Array.isArray(detail)?detail.map(e=>e.msg).join('；'):detail||message;}catch{}const error=new Error(message);error.status=response.status;error.url=response.url;throw error;}
     return response.json();
