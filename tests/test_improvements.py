@@ -29,6 +29,17 @@ def test_expired_people_are_unknown_not_current_counts(modules):
     assert state['heatmap'][0]['people_count']==0
     assert next(r for r in state['results'] if r['person_id']=='P001')['risk_level']=='未知'
 
+def test_legacy_agent_forwards_workspace_identity_to_factory(connected,monkeypatch):
+    _,g,a=connected
+    monkeypatch.setenv('DEMO_WORKSPACES_REQUIRED','1')
+    gc=TestClient(g.app);workspace=gc.post('/factory/auth/demo-session').json()['workspace']
+    login=gc.post('/factory/auth/login',headers={'X-Demo-Workspace':workspace},json={'username':'demo-safety','password':'SafetyDemo!2026'}).json()
+    headers={'X-Demo-Workspace':workspace,'Authorization':'Bearer '+login['token']}
+    result=TestClient(a.app).post('/chat',params={'query':'B-05 现在的状态'},headers=headers).json()
+    assert result['success'] and result['entityId']=='B-05'
+    wrong=TestClient(a.app).post('/chat',params={'query':'B-05 现在的状态'},headers={'Authorization':headers['Authorization']}).json()
+    assert not wrong['success']
+
 
 def test_demo_refresh_does_not_move_people(modules):
     _,g,_=modules

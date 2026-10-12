@@ -39,10 +39,9 @@ people_movement = {}
 # SQLite 数据持久化
 DB_PATH = os.getenv("AGENT_DB_PATH", os.path.join(os.path.dirname(__file__), "data.db"))
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS risk_history
+conn.execute('''CREATE TABLE IF NOT EXISTS risk_history
     (date TEXT, hour TEXT, overall_risk REAL, high_zones INTEGER, high_devices INTEGER)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS chat_logs
+conn.execute('''CREATE TABLE IF NOT EXISTS chat_logs
     (timestamp TEXT, session_id TEXT, query TEXT, answer TEXT, intent TEXT)''')
 conn.commit()
 
@@ -447,9 +446,9 @@ async def risk_reply(steps):
 async def factory_task_reply(query, request=None):
     if not (re.search(r'\b[AB]-\d{2}\b',query,re.I) or any(w in query for w in ('泵组','影响链','核查','工单','复核'))):
         return None
-    headers={'Authorization':request.headers['authorization']} if request and request.headers.get('authorization') else {}
+    headers={key:request.headers[key] for key in ('authorization','x-demo-workspace') if request and request.headers.get(key)}
     try:
-        async with httpx.AsyncClient(timeout=6) as client:
+        async with httpx.AsyncClient(timeout=6,trust_env=False) as client:
             response=await client.post(f'{GIS_API}/factory/workflow/chat',json={'query':query,'entityId':'B-05'},headers=headers)
         if response.status_code!=200:
             return {'success':False,'answer':'工厂任务未完成：'+str(response.json().get('detail','接口请求失败')),'tool_calls':[],'tool_results':[]}
@@ -588,7 +587,7 @@ async def chat_llm(query: str, session_id: str = "default", route_request: Route
             history.append({"query": query, "answer": answer, "intent": intent})
             sessions[session_id] = history[-10:]
             try:
-                cursor.execute("INSERT INTO chat_logs VALUES (?, ?, ?, ?, ?)",
+                conn.execute("INSERT INTO chat_logs VALUES (?, ?, ?, ?, ?)",
                                (datetime.now().isoformat(), session_id, query, answer, intent))
                 conn.commit()
             except Exception as e:
@@ -610,7 +609,7 @@ async def chat_llm(query: str, session_id: str = "default", route_request: Route
             history.append({"query": query, "answer": answer, "intent": intent})
             sessions[session_id] = history[-10:]
             try:
-                cursor.execute("INSERT INTO chat_logs VALUES (?, ?, ?, ?, ?)",
+                conn.execute("INSERT INTO chat_logs VALUES (?, ?, ?, ?, ?)",
                                (datetime.now().isoformat(), session_id, query, answer, intent))
                 conn.commit()
             except Exception as e:
