@@ -4,6 +4,7 @@ services:
     name: gongan-zhitong-demo
     runtime: docker
     plan: free
+    region: singapore
     branch: main
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health

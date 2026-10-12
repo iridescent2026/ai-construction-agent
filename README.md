@@ -2,9 +2,11 @@
 
 面向施工现场的"安全+进度"协同智能体。
 
-## 公网演示部署（尚未上线）
+## 公网演示（2026-10-12 已上线）
 
-已准备 Docker、Render 免费试跑配置和前后端共用一个网址的网关。两页登录、B-05 查询与三个后台健康检查已在本机通过；云平台构建和外网访问待完成。免费方案会休眠且丢失新记录，正式评审须确认持久存储。[部署说明与验收](docs/cloud-deployment.md)。
+[打开工安智瞳首页](https://gongan-zhitong-demo.onrender.com/) · [打开 GIS 工作台](https://gongan-zhitong-demo.onrender.com/workbench.html)
+
+部署在 Render 新加坡免费实例，网页与三个后台共用一个网址。Linux Docker 构建成功；公网首页模型、GIS 观测、演示账号登录、B-05 查询及三个后台健康检查通过。免费服务会休眠且丢失新增本地记录，不用于保存参赛实验原始记录。[部署说明与验收](docs/cloud-deployment.md)。
 
 ## 业务依据、检修协调与原型实验（V20）
 
