@@ -42,7 +42,7 @@
 | WORKFLOW_MODEL_ENABLED | 1 开启真实意图分类；0 仅本地词典工具 |
 | WORKFLOW_MODEL_API_KEY | 已有服务的私密密钥 |
 | WORKFLOW_MODEL_BASE_URL | DeepSeek 为 https://api.deepseek.com；兼容服务使用实际 HTTPS 地址 |
-| WORKFLOW_MODEL_NAME | DeepSeek 为 deepseek-chat；兼容服务使用实际模型名 |
+| WORKFLOW_MODEL_NAME | DeepSeek 为 deepseek-flash（官方文档于2026-10-12核对）；兼容服务使用实际模型名 |
 | WORKFLOW_MODEL_DAILY_LIMIT | 可选，默认 100；0 禁止外部模型调用 |
 
 启动失败时检查密码编码、连接池地址、依赖构建和数据库配额；不要退回临时数据库并声称已持久保存。须逐项验证登录、读写、刷新、角色隔离、模型成功/回退与重启留存。免费服务休眠及网络可达性依旧需要评审前检查，并准备源码包和视频备选。

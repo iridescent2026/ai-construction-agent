@@ -151,6 +151,8 @@ def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,con
         def json(self):return {'choices':[{'message':{'content':content}}]}
     def request(url,**kwargs):
         assert url.startswith('https://')
+        assert kwargs['json']['model']=='deepseek-flash'
+        assert kwargs['json']['thinking']=={'type':'disabled'}
         assert kwargs['json']['messages'][1]['content']=='不要创建工单，只查询设备状态'
         assert 'observations' not in kwargs['json']
         return Response()
