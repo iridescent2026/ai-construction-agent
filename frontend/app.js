@@ -106,7 +106,7 @@ function renderDevices(){
         const description=`<b>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</b><br>${view.label}<br>${d.factory?escapeHtml(factoryReadings(d)):`负荷${d.load}% · 温度${d.temperature}℃ · 漏电${d.leakage}mA`}<br>采集 ${escapeHtml(localTime(d.timestamp))}`;
         L.marker([d.location[1],d.location[0]],{icon:icon('device',view.color)}).addTo(deviceLayer).bindPopup(description).bindTooltip(escapeHtml(d.device_id));
         if(filter!=='all' && filter!==view.level)continue;
-        cards.push(`<div class="device-card" style="border-left-color:${view.color}"><div class="card-top"><strong>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</strong><span class="risk-label">${view.label}</span></div><div class="card-values">${d.factory?`<span>${escapeHtml(factoryReadings(d))}</span>`:`<span>${d.load}%</span><span>${d.temperature}℃</span><span>${d.leakage}mA</span>`}</div><div>${escapeHtml(view.level==='未知'?'观测过期，不能据此判断当前安全':d.alert)}</div><div class="card-meta">${d.source==='demo'?'演示观测':'上报观测'} · ${escapeHtml(localTime(d.timestamp))}</div><button type="button" class="locate" data-device="${escapeHtml(d.device_id)}">定位 ${escapeHtml(d.device_id)}</button></div>`);
+        cards.push(`<div class="device-card" style="border-left-color:${view.color}"><div class="card-top"><strong>${escapeHtml(d.device_id)} ${escapeHtml(d.device_type)}</strong><span class="risk-label">${view.label}</span></div><div class="card-values">${d.factory?`<span>${escapeHtml(factoryReadings(d))}</span>`:`<span>${d.load}%</span><span>${d.temperature}℃</span><span>${d.leakage}mA</span>`}</div><div>${escapeHtml(view.level==='未知'?'观测过期，不能据此判断当前安全':d.alert)}</div><div class="card-meta">${d.source==='demo'?'演示观测':d.measurementProvenance?.kind==='manual'?'手动测试导入':'接口导入（来源待核验）'} · ${escapeHtml(localTime(d.timestamp))}</div><button type="button" class="locate" data-device="${escapeHtml(d.device_id)}">定位 ${escapeHtml(d.device_id)}</button></div>`);
     }
     $('device-list').innerHTML=cards.join('')||'<p class="empty">该分类暂无设备</p>';
     counts();syncScene();
@@ -150,19 +150,15 @@ document.querySelectorAll('[data-query]').forEach(button=>button.addEventListene
 $('ask-form').addEventListener('submit',async event=>{
     event.preventDefault();$('ask-button').disabled=true;const query=$('query').value.trim();
     if(window.FACTORY_WORKBENCH&&!/巡检|路线/.test(query)){
-        const data=state.factoryData;
-        if(!data){$('answer').textContent='工厂后台断连，请恢复连接后查询当前观测。';}
-        else{const people=data.entities.filter(e=>e.kind==='person'),devices=state.devices||[],actual=data.entities.filter(e=>e.positionSource==='telemetry'||e.measurementSource==='telemetry').length;
-            $('answer').textContent=`工厂观测 v${data.revision} · ${localTime(data.updatedAt)}\n${people.length} 位人员、${devices.length} 台设备、${state.zones.features.length} 处危险区。\n当前 ${data.active.length} 条区域进入报警：${data.active.map(a=>`${a.entityId} → ${a.zoneId}${a.state==='unknown'?'（位置过期，待核验）':''}`).join('；')||'无'}。\n${actual} 个实体使用接口上报，其余为后台演示数据。\n${devices.slice(0,3).map(d=>`${d.device_id} ${d.device_type}：${factoryReadings(d)}`).join('\n')}\n设备安全阈值待现场配置，演示读数不能判定设备安全。`;
-        }
-        $('ask-button').disabled=false;return;
+        try{const {factoryRequest}=await import('./factory-client.mjs');const result=await factoryRequest('/workflow/chat',{query,entityId:document.getElementById('workflow-entity')?.value||'B-05',useTestRule:document.getElementById('workflow-test-rule')?.checked||false});$('answer').textContent=result.answer+'\n实际工具：'+result.tool_calls.join(' → ');if(result.draft){document.getElementById('device-workflow')?.scrollIntoView({behavior:'smooth'});window.dispatchEvent(new CustomEvent('workflow-chat-result',{detail:result}));}}
+        catch(error){$('answer').textContent='未完成任务：'+error.message;}finally{$('ask-button').disabled=false;}return;
     }
     const options={method:'POST'};let points=null;
     if(/巡检|路线/.test(query)){
         state.route=[];routeLayer.clearLayers();syncScene();
         if(!state.devices || state.devices.length<2){$('answer').textContent='设备点位不足，请先恢复连接。';$('ask-button').disabled=false;return;}
         // Copy the exact request points; never redraw a response against a later refresh.
-        points=state.devices.map(d=>({id:d.device_id,lng:d.location[0],lat:d.location[1],risk:d.risk_score}));
+        points=state.devices.map(d=>({id:d.device_id,lng:d.location[0],lat:d.location[1],risk:Number.isFinite(d.risk_score)?d.risk_score:0}));
         options.headers={'Content-Type':'application/json'};options.body=JSON.stringify({start_id:$('route-start').value,points});
     }
     $('answer').textContent='正在读取数据并执行工具…';

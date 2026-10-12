@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from common.runtime import is_fresh
 from gis.imagery import SITE, imagery_metadata
@@ -101,7 +101,7 @@ class FactoryStore:
             for entity in revised:
                 observed = previous.get(entity['id'], {})
                 for key in ['riskState', 'currentZones', 'positionSource', 'positionTimestamp',
-                            'measurements', 'measurementSource', 'measurementTimestamp']:
+                            'measurements', 'measurementSource', 'measurementTimestamp', 'measurementProvenance', 'positionProvenance']:
                     if key in observed:
                         entity[key] = copy.deepcopy(observed[key])
                 # A layout update may relocate demo actors, but never overwrites
@@ -197,7 +197,7 @@ class FactoryStore:
             data['site']=copy.deepcopy(SITE)
             return data
 
-    def observe(self, batch):
+    def observe(self, batch, provenance=None):
         with self.lock:
             by_id={e['id']:e for e in self.data['entities']}
             # Validate the entire batch before any mutation.
@@ -220,11 +220,13 @@ class FactoryStore:
                 if o.x is not None:
                     e['anchor'][0],e['anchor'][2]=o.x,o.z
                     e.update(positionTimestamp=observed,positionSource='telemetry')
+                    e['positionProvenance']=copy.deepcopy(provenance or {'kind':'manual','actor':None})
                     if self.data['demo'] and o.id in [p['id'] for p in demo_paths(self.data['demo']['key'])]:
                         self.data['demo']=None
                 if o.measurements:
                     e.pop('measurementNote',None)
                     e.update(measurements={k:m.model_dump() for k,m in o.measurements.items()},measurementTimestamp=observed,measurementSource='telemetry')
+                    e['measurementProvenance']=copy.deepcopy(provenance or {'kind':'manual','actor':None})
             self.evaluate();self.save()
             return self.snapshot()
 
@@ -257,6 +259,9 @@ class FactoryStore:
 def install_factory(app):
     default=Path(os.getenv('GIS_DB_PATH',str(Path(__file__).with_name('data.db')))).with_suffix('.factory.db')
     store=FactoryStore(os.getenv('FACTORY_DB_PATH',str(default)))
+    from gis.factory_accounts import Accounts
+    accounts=Accounts(store.path.with_suffix('.accounts.db'),store.demo_enabled)
+    accounts.install(app);app.state.factory_accounts=accounts
     from gis.factory_analysis import install_analysis
     analysis=install_analysis(app,store)
     from gis.factory_demo_feed import DemoFeed,FeedCommand
@@ -272,8 +277,10 @@ def install_factory(app):
         return imagery_metadata(refresh)
 
     @router.post('/observations')
-    def observations(batch:Batch):
-        data=store.observe(batch);analysis.record(data);return data
+    def observations(batch:Batch,request:Request):
+        user=accounts.require(request,{'safety','maintenance','collector'})
+        provenance={'kind':'authenticated_import' if user['role']=='collector' else 'manual','actor':user['id'],'receivedAt':now_iso()}
+        data=store.observe(batch,provenance);analysis.record(data);return data
 
     @router.post('/demo')
     def demo(command:DemoCommand):
@@ -314,3 +321,7 @@ def install_factory(app):
 
     app.include_router(router)
     app.state.factory=store
+    from gis.factory_business import install_business
+    install_business(app,store,analysis,accounts)
+    from gis.factory_workflow import install_workflow
+    install_workflow(app,store,analysis,accounts)

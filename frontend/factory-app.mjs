@@ -7,7 +7,7 @@ import {layoutSectionLabels} from './factory-section-layout.mjs';
 import {buildFactorySite,updateFactorySite} from './factory-site-model.mjs';
 import {buildFactory,VIEWS} from './factory-model.mjs';
 import {DEMO_PATHS} from './factory-safety.mjs';
-import {watchFactory,factoryRequest,measurementText,freshFactory} from './factory-client.mjs';
+import {watchFactory,factoryRequest,measurementText,freshFactory,observationSource} from './factory-client.mjs';
 let stopSubscription,serverState,connected=false,replayFrame=null,liveLatest,highlightGroup,highlightNodes=[];
 const embedded=window.parent!==window&&new URLSearchParams(location.search).has('embed');
 const referenceArea=new URLSearchParams(location.search).get('referenceArea');
@@ -26,7 +26,7 @@ function paintDetail(){
     $('factory-detail').classList.toggle('risk-detail',info.riskState==='danger');$('detail-id').textContent=info.id;$('detail-name').textContent=info.title;
     const risk=info.riskState==='danger'?`进入危险区域：${info.currentZones.join('、')}。`:info.riskState==='unknown'?'位置未知，保留上次区域记录。':info.riskState==='clear'?'当前未进入限制区域。':'';
     const position=(info.kind==='person'||info.mobile)&&Number.isFinite(info.anchor[0])&&Number.isFinite(info.anchor[2])?`场景位置：${info.anchor[0].toFixed(1)} m / ${info.anchor[2].toFixed(1)} m。`:'';
-    const source=info.positionSource==='telemetry'?'接口定位':'演示定位',observed=info.positionTimestamp?`采集 ${new Date(info.positionTimestamp).toLocaleTimeString('zh-CN',{hour12:false})} · ${source}。`:'';
+    const source=observationSource(info,'position'),observed=info.positionTimestamp?`采集 ${new Date(info.positionTimestamp).toLocaleTimeString('zh-CN',{hour12:false})} · ${source}。`:'';
     $('detail-description').textContent=(!connected&&stopSubscription?'后台断连，以下为最后观测。':'')+risk+position+(info.kind==='device'?measurementText(info,replayFrame?.updatedAt)+'。':'')+observed+info.text.replace('（模拟位置）','').replace('本地模拟位置，','');
 }
 function entities(model=root){return [...(model.userData.locations||[]),...(model.userData.devices||[]),...(model.userData.people||[]),...(model.userData.zones||[])];}
@@ -175,7 +175,7 @@ window.addEventListener('pagehide',event=>{if(event.persisted)return;disposed=tr
 function applyState(data, historical=false){if(!historical){liveLatest=data;if(replayFrame)return;}
     if(!ready||!data.entities)return;serverState=data;connected=true;
     const byId=new Map(catalog().map(info=>[info.id,info]));
-    for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote'])info[key]=record[key];}
+    for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote','measurementProvenance','positionProvenance'])info[key]=record[key];}
     snapshot={active:data.active.filter(a=>a.view!=='overview'),events:data.events.filter(e=>e.view!=='overview'),added:[],people:catalog().filter(e=>e.kind==='person').length};
     stage.dataset.revision=data.revision;renderer.shadowMap.needsUpdate=true;evaluateSafety();
     window.dispatchEvent(new CustomEvent('factory-data-update',{detail:data}));
@@ -186,7 +186,7 @@ function updateConnection(error){
     $('live-strip')?.classList.toggle('disconnected',!connected);
     if($('live-status'))$('live-status').textContent=replayFrame?'● 历史回放 · 非当前状态':connected?'● 工厂后台已连接 · 自动同步':'● 数据断连 · 当前状态未知';
     if($('live-time'))$('live-time').textContent=serverState?`版本 ${serverState.revision} / ${new Date(serverState.updatedAt).toLocaleTimeString('zh-CN',{hour12:false})}`:'等待首帧数据';
-    if($('live-source')){const actual=serverState?.entities.filter(e=>e.view!=='overview'&&(e.positionSource==='telemetry'||e.measurementSource==='telemetry')).length||0;$('live-source').textContent=actual?`${actual} 个接口上报实体 · 其余为后台演示`:'后台演示数据 · 未接现场传感器';}
+    if($('live-source')){const actual=serverState?.entities.filter(e=>e.view!=='overview'&&(e.positionSource==='telemetry'||e.measurementSource==='telemetry')).length||0;$('live-source').textContent=actual?`${actual} 个接口导入实体（可含手动测试） · 其余为后台演示`:'后台演示数据 · 未接现场传感器';}
     $('asset-status').textContent=connected?`${assets.size} / 10 资产 · 同源观测 v${serverState.revision}`:'后台断连 · 保留最后模型';
     if(error&&$('home-status'))$('home-status').textContent=error.message;
 }

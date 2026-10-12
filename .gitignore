@@ -14,3 +14,4 @@ node_modules/
 *.db
 *.db-*
 .pytest_cache/
+cloud-data/

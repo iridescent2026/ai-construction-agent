@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Request
 from common.runtime import configure_api, is_fresh, allowed_origins
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict, model_validator
@@ -444,14 +444,29 @@ async def risk_reply(steps):
     return {"success":True,"answer":answer,"steps":steps,"tool_calls":["/risk"],"tool_results":[{"tool":"/risk","output":data,"status":"success"}]}
 
 
+async def factory_task_reply(query, request=None):
+    if not (re.search(r'\b[AB]-\d{2}\b',query,re.I) or any(w in query for w in ('泵组','影响链','核查','工单','复核'))):
+        return None
+    headers={'Authorization':request.headers['authorization']} if request and request.headers.get('authorization') else {}
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            response=await client.post(f'{GIS_API}/factory/workflow/chat',json={'query':query,'entityId':'B-05'},headers=headers)
+        if response.status_code!=200:
+            return {'success':False,'answer':'工厂任务未完成：'+str(response.json().get('detail','接口请求失败')),'tool_calls':[],'tool_results':[]}
+        return response.json()
+    except (httpx.HTTPError,ValueError,KeyError):
+        return {'success':False,'answer':'工厂任务后台不可用，未执行查询或派单。','tool_calls':[],'tool_results':[]}
+
 @app.post("/chat")
-async def chat(query: str, route_request: RouteRequest | None = Body(default=None)):
+async def chat(query: str, route_request: RouteRequest | None = Body(default=None),request:Request=None):
     """智能体对话：解析问题→调用工具→返回答案+推理步骤"""
     steps = []
     steps.append({"step": 1, "desc": f"解析问题：{query}"})
 
     if "巡检" in query or "路线" in query:
         return route_reply(route_request, steps)
+    factory_reply=await factory_task_reply(query,request)
+    if factory_reply is not None:return factory_reply
     if "电气" in query or "配电" in query or "设备" in query:
         return await electrical_reply(steps)
 
@@ -484,7 +499,7 @@ async def chat(query: str, route_request: RouteRequest | None = Body(default=Non
 # LLM 对话接口
 # ============================================================
 @app.post("/chat_llm")
-async def chat_llm(query: str, session_id: str = "default", route_request: RouteRequest | None = Body(default=None)):
+async def chat_llm(query: str, session_id: str = "default", route_request: RouteRequest | None = Body(default=None),request:Request=None):
     """用 LLM 做意图识别 + 工具调用（带对话历史）"""
     steps = []
     steps.append({"step": 1, "desc": f"解析问题：{query}"})
@@ -492,6 +507,8 @@ async def chat_llm(query: str, session_id: str = "default", route_request: Route
     # Explicit safety requests use deterministic tools even when no LLM key is configured.
     if "巡检" in query or "路线" in query:
         return route_reply(route_request, steps)
+    factory_reply=await factory_task_reply(query,request)
+    if factory_reply is not None:return factory_reply
     if "电气" in query or "配电" in query or "设备" in query:
         return await electrical_reply(steps)
 

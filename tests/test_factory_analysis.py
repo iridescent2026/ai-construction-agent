@@ -147,6 +147,8 @@ def test_analysis_http_routes_and_validation(tmp_path,monkeypatch):
     monkeypatch.setenv('FACTORY_DB_PATH',str(tmp_path/'factory-http.db'))
     app=FastAPI();install_factory(app)
     with TestClient(app) as client:
+        token=client.post('/factory/auth/login',json={'username':'demo-safety','password':'SafetyDemo!2026'}).json()['token']
+        client.headers['Authorization']='Bearer '+token
         assert client.get('/factory/analysis').status_code==200
         assert client.get('/factory/analysis/impact/B-05').json()['hasUnverified']
         assert client.post('/factory/analysis/plans',json={'plans':[]}).status_code==200
@@ -154,7 +156,7 @@ def test_analysis_http_routes_and_validation(tmp_path,monkeypatch):
         created=client.post('/factory/analysis/orders',json={'entityId':'B-05','reason':'HTTP复核','actor':'安全员'})
         assert created.status_code==200
         order=created.json()
-        assert client.post('/factory/analysis/orders/'+order['id'],json={'action':'assign','expectedVersion':1,'actor':'安全员','assignee':'维修员'}).status_code==200
+        assert client.post('/factory/analysis/orders/'+order['id'],json={'action':'assign','expectedVersion':1,'actor':'安全员','assignee':'demo-maintenance'}).status_code==200
         assert client.post('/factory/analysis/meters',json={'readings':[meter('http1',-60),meter('http2',0)]}).status_code==200
         assert client.get('/factory/analysis/replay').json()
 

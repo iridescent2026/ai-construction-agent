@@ -1,0 +1,19 @@
+# Free trial only. Paid instances/disks require an explicit user decision.
+services:
+  - type: web
+    name: gongan-zhitong-demo
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: DEMO_MODE
+        value: "1"
+      - key: FACTORY_ANALYSIS_DEMO
+        value: "1"
+      - key: PUBLIC_READ_ONLY
+        value: "0"
+      - key: DATA_DIR
+        value: /app/cloud-data
