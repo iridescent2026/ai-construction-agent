@@ -160,7 +160,7 @@ class Accounts:
                 return [{**self.public(row),**self.profile(db,row[0])} for row in db.execute('SELECT id,name,role FROM users ORDER BY id') if self.profile(db,row[0]).get('enabled',True)]
         @router.get('/mode')
         def mode():
-            return {'demoAccounts': self.demo_credentials, 'simulationEnabled':self.demo_enabled,'accountsConfigured': self.has_accounts(),'project':self.project,'storage':storage_status(),'language':{'configured':os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1' and bool(os.getenv('WORKFLOW_MODEL_API_KEY')),'model':os.getenv('WORKFLOW_MODEL_NAME','deepseek-chat')}}
+            return {'demoAccounts': self.demo_credentials, 'simulationEnabled':self.demo_enabled,'accountsConfigured': self.has_accounts(),'project':self.project,'storage':storage_status(),'language':{'configured':os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1' and bool(os.getenv('WORKFLOW_MODEL_API_KEY')),'model':os.getenv('WORKFLOW_MODEL_NAME','deepseek-flash')}}
         @router.post('/logout')
         def logout(request: Request):
             self.require(request)
