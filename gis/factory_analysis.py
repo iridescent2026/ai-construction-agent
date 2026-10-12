@@ -8,6 +8,7 @@ import copy
 import json
 import math
 import sqlite3
+from common.database import connect as database_connect
 import threading
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -16,6 +17,7 @@ from contextlib import contextmanager, nullcontext
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from shapely.geometry import Polygon, LineString, box
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -79,6 +81,11 @@ class WorkPlan(Strict):
     size: list[float] = Field(min_length=2, max_length=2)
     kind: str = Field(default='检修', max_length=30)
     source: str = 'manual'
+    floor: str | None = Field(default=None,max_length=80)
+    elevation: list[float] | None = Field(default=None,min_length=2,max_length=2)
+    polygon: list[list[float]] | None = Field(default=None,min_length=3,max_length=100)
+    trajectory: list[list[float]] | None = Field(default=None,min_length=2,max_length=100)
+    sweepRadius: float = Field(default=0,ge=0,le=500)
 
     @model_validator(mode='after')
     def validate_plan(self):
@@ -89,6 +96,15 @@ class WorkPlan(Strict):
             raise ValueError('工区或来源无效')
         if any(not math.isfinite(v) or abs(v) > 1000 for v in self.center) or any(not math.isfinite(v) or v <= 0 or v > 1000 for v in self.size):
             raise ValueError('范围应为有效的场景米坐标和正数尺寸')
+        if self.elevation is not None and (any(not math.isfinite(v) or abs(v)>1000 for v in self.elevation) or self.elevation[1]<=self.elevation[0]):raise ValueError('高度区间必须有限且上限高于下限')
+        for points in [self.polygon,self.trajectory]:
+            if points and any(len(p)!=2 or any(not math.isfinite(v) or abs(v)>1000 for v in p) for p in points):raise ValueError('面域与轨迹须使用有效 x/z 米坐标')
+        if self.polygon and self.trajectory:raise ValueError('面域与扫掠轨迹只能选择一种')
+        if self.polygon and (not Polygon(self.polygon).is_valid or Polygon(self.polygon).area<=0):raise ValueError('面域必须为有效且非零面积的多边形')
+        if self.trajectory and (self.sweepRadius<=0 or LineString(self.trajectory).length<=0):raise ValueError('扫掠轨迹须有长度及正数半径')
+        if self.polygon or self.trajectory:
+            shape=Polygon(self.polygon) if self.polygon else LineString(self.trajectory).buffer(self.sweepRadius)
+            x,z,X,Z=shape.bounds;self.center=[(x+X)/2,(z+Z)/2];self.size=[X-x,Z-z]
         return self
 
 
@@ -154,21 +170,28 @@ class Meters(Strict):
     readings: list[Meter] = Field(min_length=1, max_length=1000)
 
 
+def plan_shape(plan):
+    if plan.get('polygon'):return Polygon(plan['polygon'])
+    if plan.get('trajectory'):return LineString(plan['trajectory']).buffer(plan.get('sweepRadius',0))
+    x,z=plan['center'];w,d=plan['size'];return box(x-w/2,z-d/2,x+w/2,z+d/2)
 def conflicts(plans):
     results=[]
-    for index, left in enumerate(plans):
+    for index,left in enumerate(plans):
         for right in plans[index+1:]:
-            if left['view'] != right['view']:
-                continue
-            start=max(seconds(left['startsAt']), seconds(right['startsAt']))
-            end=min(seconds(left['endsAt']), seconds(right['endsAt']))
-            dx=min(left['center'][0]+left['size'][0]/2,right['center'][0]+right['size'][0]/2)-max(left['center'][0]-left['size'][0]/2,right['center'][0]-right['size'][0]/2)
-            dz=min(left['center'][1]+left['size'][1]/2,right['center'][1]+right['size'][1]/2)-max(left['center'][1]-left['size'][1]/2,right['center'][1]-right['size'][1]/2)
-            if end>start and dx>0 and dz>0:
-                results.append({'plans':[left['id'],right['id']], 'titles':[left['title'],right['title']],
-                    'view':left['view'], 'overlapSeconds':round(end-start), 'overlapAreaM2':round(dx*dz,2),
-                    'basis':'同工区矩形范围与时间交集；需人工确认，不代替作业许可',
-                    'source':'demo' if 'demo' in [left['source'],right['source']] else 'manual'})
+            if left['view']!=right['view']:continue
+            start=max(seconds(left['startsAt']),seconds(right['startsAt']));end=min(seconds(left['endsAt']),seconds(right['endsAt']))
+            if end<=start:continue
+            low=high=None;known=bool(left.get('elevation') and right.get('elevation'))
+            if known:
+                low=max(left['elevation'][0],right['elevation'][0]);high=min(left['elevation'][1],right['elevation'][1])
+                if high<=low:continue
+            area=plan_shape(left).intersection(plan_shape(right)).area
+            if area<=0:continue
+            results.append({'plans':[left['id'],right['id']],'titles':[left['title'],right['title']],'view':left['view'],'overlapSeconds':round(end-start),'overlapAreaM2':round(area,2),
+                'overlapHeightM':round(high-low,2) if known else None,'heightKnown':known,
+                'floors':[left.get('floor'),right.get('floor')],
+                'basis':'同工区面域/扫掠范围与时段交集；'+('包含已填写高度交集' if known else '高度未知，保留潜在冲突，不依据楼层名称排除')+'；矩形为默认范围，需人工确认，不代替作业许可',
+                'source':'demo' if 'demo' in [left['source'],right['source']] else 'manual'})
     return results
 
 
@@ -225,7 +248,7 @@ class AnalysisStore:
 
     @contextmanager
     def connect(self):
-        db=sqlite3.connect(self.path, timeout=10)
+        db=database_connect(self.path, timeout=10)
         try:
             with db:
                 yield db
@@ -245,7 +268,7 @@ class AnalysisStore:
             with self.lock,self.connect() as db:
                 db.execute('INSERT OR IGNORE INTO replay_frames(instance,revision,time,payload) VALUES(?,?,?,?)',
                     (data['instanceId'],data['revision'],data['updatedAt'],json.dumps(payload,ensure_ascii=False)))
-                db.execute('DELETE FROM replay_frames WHERE id < (SELECT MAX(id)-3599 FROM replay_frames)')
+                db.execute('DELETE FROM replay_frames WHERE id < (SELECT MAX(id)-'+str(179 if getattr(self.factory,'sandbox',False) else 3599)+' FROM replay_frames)')
             self.record_error=None
         except (sqlite3.Error,OSError) as error:
             self.record_error='回放记录失败：'+type(error).__name__
@@ -450,7 +473,7 @@ def install_analysis(app, factory):
         user=accounts.require(request,{'safety','reviewer'})
         if any(e.verified for e in value.edges):
             accounts.require(request,{'reviewer'})
-        scope='prototype' if user['id'] in ('demo-safety','demo-maintenance','demo-reviewer','demo-observer') else 'recorded'
+        scope='prototype' if accounts.sandbox or user['id'].startswith('demo-') else 'recorded'
         value=value.model_copy(update={'edges':[e.model_copy(update={'reviewer':user['id'],'reviewScope':scope,'reviewedAt':stamp()}) if e.verified else e.model_copy(update={'reviewScope':'pending','reviewedAt':None}) for e in value.edges]})
         return store.graph(value)
     @router.post('/plans')

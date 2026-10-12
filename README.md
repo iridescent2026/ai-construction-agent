@@ -6,7 +6,13 @@
 
 [打开工安智瞳首页](https://gongan-zhitong-demo.onrender.com/) · [打开 GIS 工作台](https://gongan-zhitong-demo.onrender.com/workbench.html)
 
-部署在 Render 新加坡免费实例，网页与三个后台共用一个网址。Linux Docker 构建成功；公网首页模型、GIS 观测、演示账号登录、B-05 查询及三个后台健康检查通过。免费服务会休眠且丢失新增本地记录，不用于保存参赛实验原始记录。[部署说明与验收](docs/cloud-deployment.md)。
+部署在 Render 新加坡免费实例，网页与三个后台共用一个网址。新版本加入统一登录、个人演示空间、账号管理、外部 PostgreSQL、业务备份与 A/B 键盘巡视。未配置外部数据库时免费容器仍会丢失新增记录；新版本线上接入和跨重启验收须另行确认。[部署说明](docs/cloud-deployment.md)、[V22 操作与验收](docs/access-storage-inspection-v22.md)。
+
+## 登录、项目留存与 A/B 巡视（V22）
+
+首页与 GIS 先登录再进入，同一会话展示个人待办；管理员可创建、设岗与停用账号。每浏览器独立演示空间，模拟启停需要岗位权限。工单、账号和实验支持 Supabase PostgreSQL，并提供业务备份和跨重启留存核验。多问题助手可接 DeepSeek 兼容 API 作意图分类，事实与操作仍来自规则工具。作业冲突支持多边形、扫掠轨迹和高度；巡视使用键盘/触屏移动观察相机，不冒充现场人员。
+
+工程材料审阅及真人计时实验已提供入口，尚需团队实际组织并核验。演示账号、备份导入和自动验收不能计为现场证据或企业效果。[完整说明与私密配置](docs/access-storage-inspection-v22.md)。
 
 ## 业务依据、检修协调与原型实验（V20）
 

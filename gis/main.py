@@ -8,6 +8,7 @@ import os
 import json
 import math
 import sqlite3
+from common.database import connect as database_connect
 from contextlib import contextmanager
 from shapely.geometry import Point
 try:
@@ -33,7 +34,7 @@ DB_PATH = Path(os.environ.get("GIS_DB_PATH", Path(__file__).with_name("data.db")
 @contextmanager
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_PATH, timeout=10)
+    db = database_connect(DB_PATH, timeout=10)
     try:
         with db:
             yield db

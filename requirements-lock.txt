@@ -39,3 +39,6 @@ typing_extensions==4.16.0
 tzdata==2026.5
 uvicorn==0.54.0
 websockets==17.2
+
+psycopg[binary,pool]==3.3.6
+psycopg-pool==3.3.3

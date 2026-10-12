@@ -61,7 +61,7 @@ def test_flow_test_conditions_are_explicit_and_do_not_create_engineering_rules(s
     assert '工程限值' in result['observation']['rule']['basis']
     assert client.get('/factory/workflow/case/B-05').json()['observation']['status']=='pending'
     app.state.factory.demo_enabled=False
-    assert client.get('/factory/workflow/case/B-05?useTestRule=true').status_code==403
+    assert client.get('/factory/workflow/case/B-05?useTestRule=true',headers=headers).status_code==403
 
 def test_account_permission_no_actor_spoofing_and_complete_loop(system):
     app,client=system;safety=login(client,'safety');maintenance=login(client,'maintenance');reviewer=login(client,'reviewer');observer=login(client,'observer')

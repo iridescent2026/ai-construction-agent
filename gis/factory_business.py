@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import Field, model_validator
-from gis.factory_analysis import Strict, WorkPlan, conflicts, seconds, stamp, aware
+from gis.factory_analysis import Strict, WorkPlan, conflicts, seconds, stamp, aware, plan_shape
 
 SCENARIO = {
     'id': 'MOD-SUPPORT-B05', 'version': 1, 'status': 'design_assumption',
@@ -59,7 +59,8 @@ def maintenance_check(entity, plan, plans, now=None, exclude_id=None):
         raise HTTPException(422, '检修范围必须使用设备所在工区坐标')
     if row['source'] != 'manual':
         raise HTTPException(422, '检修候选计划需标记为手动测试计划')
-    if any(abs(entity['anchor'][axis]-row['center'][index])>row['size'][index]/2 for index,axis in enumerate((0,2))):
+    from shapely.geometry import Point
+    if not plan_shape(row).covers(Point(entity['anchor'][0],entity['anchor'][2])):
         raise HTTPException(422, '检修范围必须包含设备在当前模型中的位置，不能把范围移到别处绕过冲突')
     if seconds(row['endsAt']) <= (now or time.time()):
         raise HTTPException(409, '检修候选计划已过期')
@@ -68,7 +69,7 @@ def maintenance_check(entity, plan, plans, now=None, exclude_id=None):
         raise HTTPException(409, '候选计划编号已存在，请更换编号')
     matches = [c for c in conflicts([row, *peers]) if row['id'] in c['plans']]
     return {'plan': row, 'conflicts': matches, 'blocked': bool(matches),
-            'basis': '同工区矩形与时间交集；有冲突不允许确认安排，无交集不代表获得现场作业许可。',
+            'basis': '同工区面域/扫掠范围、时段及已声明高度的交集；有冲突不允许确认安排，无交集不代表获得现场作业许可。',
             'nextStep': '调整时段或范围后重新核查' if matches else '核对现场隔离、许可及相关岗位后，由安全员确认核查工单'}
 
 def evaluate_registered(entity, rules, fresh, use_test, now):
@@ -98,6 +99,8 @@ def evaluate_registered(entity, rules, fresh, use_test, now):
 class RunStart(Strict):
     taskId: Literal['fresh_alert', 'stale', 'no_trigger', 'missing']
     method: Literal['manual', 'system']
+    participantDeclaration: bool = False
+    background: str = Field(default='',max_length=300)
 
 class RunFinish(Strict):
     observation: Literal['triggered', 'unknown', 'not_triggered']
@@ -174,7 +177,7 @@ class Business:
             if row['version'] != value.expectedVersion: raise HTTPException(409, '复核对象已变更，请刷新')
             if row['author'] == user['id']: raise HTTPException(403, '提出人不能复核自己的依据')
             if value.decision == 'approve' and not row.get('reference', '').strip(): raise HTTPException(422, '批准复核记录必须填写出处依据')
-            demo = user['id'] in ('demo-safety','demo-maintenance','demo-reviewer','demo-observer')
+            demo = self.analysis.factory.sandbox or user['id'].startswith('demo-')
             row.update(version=row['version']+1, status='rejected' if value.decision=='reject' else 'prototype_reviewed' if demo or row.get('purpose')=='software_test' else 'review_recorded',
                        reviewer=user['id'], qualification=value.qualification, reviewNote=value.note, reviewedAt=stamp())
             row['history'].append({'action': value.decision, 'actor': user['id'], 'at': stamp(),
@@ -185,6 +188,7 @@ class Business:
     def start_run(self, value, user):
         task = next(t for t in experiment_tasks() if t['id']==value.taskId)
         row = {'id': 'RUN-'+uuid.uuid4().hex[:12], 'owner': user['id'], 'method': value.method,
+               'participantDeclaration':value.participantDeclaration,'background':value.background,'recommendedFirstMethod':'manual' if int.from_bytes(user['id'].encode(),'little')%2==0 else 'system',
                'task': task, 'startedAt': stamp(), 'startedEpoch': time.time(), 'status': 'running'}
         with self.analysis.lock,self.analysis.connect() as db:
             if db.execute('SELECT COUNT(*) FROM prototype_runs').fetchone()[0] >= 2000: raise HTTPException(409, '原型实验达到2000条，请导出归档')

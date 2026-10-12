@@ -168,16 +168,13 @@ class Workflow:
     def chat(self,command,request):
         query=command.query.strip()
         if not query:raise HTTPException(422,'问题不能为空')
-        explicit=re.search(r'\b[A-B]-\d{2}\b',query,re.I)
-        id=explicit.group().upper() if explicit else command.entityId
-        if any(word in query for word in ('关闭','复核','怎么处理完')):intent='review'
-        elif any(word in query for word in ('安排','创建工单','生成工单','派工','核查任务')):intent='draft'
-        elif any(word in query for word in ('建议','怎么办','如何处置')):intent='recommendations'
-        elif any(word in query for word in ('负责','责任','处理记录')):intent='responsibility'
-        elif any(word in query for word in ('人员','作业','谁在','冲突')):intent='people'
-        elif any(word in query for word in ('影响','关联','连接')):intent='impact'
-        elif any(word in query for word in ('状态','温度','压力','异常','泵组','设备','现在','风险')):intent='status'
-        else:return {'success':False,'needsInput':True,'answer':'目前支持设备状态、候选影响、相关人员与作业、核查草案及维修复核五类任务。请明确问题。','tool_calls':[],'tool_results':[],'engine':'rule-tool-orchestrator'}
+        from gis.workflow_language import interpret
+        import os
+        if os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1':self.accounts.require(request)
+        parsed=interpret(query,command.entityId,str(self.accounts.path));id=parsed['entityId'];intent=parsed['intent']
+        if parsed['clarification']:
+            traces=[{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else []
+            return {'success':False,'needsInput':True,'answer':parsed['clarification'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'engine':'rule-tool-orchestrator','languageEngine':parsed['engine']}
         case=self.case(id,command.useTestRule);obs=case['observation'];draft=None
         if intent=='status':
             readings='、'.join(f'{k} {m["value"]}{m["unit"]}' for k,m in obs['measurements'].items()) or '没有测量读数'
@@ -198,7 +195,20 @@ class Workflow:
             case['toolResults'].append({'tool':'prepare_investigation_draft','input':{'entityId':id},'output':{'draftId':draft['id'],'status':draft['status']},'status':'success','factoryRevision':case['factoryRevision']})
             answer=f'已生成核查草案 {draft["id"]}，尚未创建或指派工单。请核对依据、选择维修账号，再点击确认。'
         else:answer='安全员确认并指派 → 被指派维修账号开始处理 → 提交核查凭证 → 另一复核账号审核关闭；支持退回。聊天不能直接关闭工单，关闭工单不会自动解除仍存在的报警。'
-        return {'success':True,'intent':intent,'entityId':id,'answer':answer,'case':case,'draft':draft,'engine':'rule-tool-orchestrator','tool_calls':[t['tool'] for t in case['toolResults']],'tool_results':case['toolResults']}
+        if parsed['trace']:
+            case['toolResults'].insert(0,{**parsed['trace'],'input':{'query':query},'factoryRevision':case['factoryRevision']})
+        extra=[]
+        for other in parsed['intents']:
+            if other==intent:continue
+            if other=='status':extra.append('观测：'+obs['statusLabel']+'；来源 '+obs['source']+'；采集 '+str(obs['observedAt'])+'；依据 '+obs['rule']['basis'])
+            elif other=='impact':extra.append('关联：'+('、'.join(n['id'] for n in case['impact']['nodes']) or '暂无台账')+'；'+case['impact']['basis'])
+            elif other=='people':extra.append('人员与作业：有效相关人员 '+str(len(case['people']['valid']))+'，同工区未知位置 '+str(len(case['people']['unknownInWorkArea']))+'；相关计划 '+str(len(case['workPlans']['items']))+' 项。拟检修冲突需填写时段与范围后检查。')
+            elif other=='responsibility':extra.append('责任：'+('；'.join(o['id']+' → '+str(o['assignee'] or '待指派') for o in case['orders']) or '尚未登记责任工单'))
+            elif other=='review':extra.append('复核：处理账号提交凭证，由另一复核账号关闭或退回；不通过聊天直接关闭。')
+            elif other=='recommendations':extra.append('建议：'+'；'.join(r['action'] for r in case['recommendations']))
+        if extra:answer+='\n\n'+'\n'.join(extra)
+        missing=['拟检修开始/结束时间','实际作业范围与高度'] if '冲突' in query else []
+        return {'success':True,'intent':intent,'intents':parsed['intents'],'languageEngine':parsed['engine'],'missingInputs':missing,'entityId':id,'answer':answer,'case':case,'draft':draft,'engine':'rule-tool-orchestrator','tool_calls':[t['tool'] for t in case['toolResults']],'tool_results':case['toolResults']}
 
 def install_workflow(app,factory,analysis,accounts):
     workflow=Workflow(factory,analysis,accounts);router=APIRouter(prefix='/factory/workflow',tags=['device-investigation'])

@@ -23,7 +23,7 @@ async def lifespan(app):
     env={**os.environ,'GIS_API':'http://127.0.0.1:8000','ELEC_API':'http://127.0.0.1:8001',
          'FACTORY_DB_PATH':str(data/'factory.db'),'GIS_DB_PATH':str(data/'gis.db'),
          'ELECTRICAL_DB_PATH':str(data/'electrical.db'),'AGENT_DB_PATH':str(data/'agent.db')}
-    env.setdefault('DEMO_MODE','1');env.setdefault('FACTORY_ANALYSIS_DEMO','1')
+    env.setdefault('DEMO_MODE','1');env.setdefault('FACTORY_ANALYSIS_DEMO','1');env.setdefault('DEMO_WORKSPACES_REQUIRED','1')
     commands=[
         ['-m','uvicorn','gis.main:app','--host','127.0.0.1','--port','8000'],
         ['-m','uvicorn','electrical.main:app','--host','127.0.0.1','--port','8001'],
@@ -82,6 +82,8 @@ async def proxy(service:str,path:str,request:Request):
     if not valid_origin(request):return JSONResponse({'detail':'不允许此网页来源操作演示'},status_code=403)
     if request.method=='OPTIONS':return Response(status_code=204)
     if path in ('docs','redoc','openapi.json'):return JSONResponse({'detail':'公网入口不开放内部接口文档'},status_code=404)
+    if os.getenv('DEMO_WORKSPACES_REQUIRED','1')=='1' and request.method not in ('GET','HEAD','OPTIONS') and not (service=='gis' and path.startswith('factory/')):
+        return JSONResponse({'detail':'公开演示只接受隔离工厂工作台的操作；旧版共享写接口未开放'},status_code=403)
     if request.method=='POST' and os.getenv('PUBLIC_READ_ONLY','0')=='1':
         return JSONResponse({'detail':'此公开实例只读；完整流程请运行提交代码包'},status_code=403)
     chunks=[];size=0

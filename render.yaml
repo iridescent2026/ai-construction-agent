@@ -18,3 +18,6 @@ services:
         value: "0"
       - key: DATA_DIR
         value: /app/cloud-data
+
+      - key: DEMO_WORKSPACES_REQUIRED
+        value: "1"

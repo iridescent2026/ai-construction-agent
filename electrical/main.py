@@ -8,6 +8,7 @@ import os
 import json
 import random
 import sqlite3
+from common.database import connect as database_connect
 import uuid
 from contextlib import contextmanager
 
@@ -76,7 +77,7 @@ def build_device_response(d):
 @contextmanager
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_PATH, timeout=10)
+    db = database_connect(DB_PATH, timeout=10)
     try:
         with db:
             yield db
