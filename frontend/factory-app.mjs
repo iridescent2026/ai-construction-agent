@@ -8,6 +8,8 @@ import {buildFactorySite,updateFactorySite} from './factory-site-model.mjs';
 import {buildFactory,VIEWS} from './factory-model.mjs';
 import {DEMO_PATHS} from './factory-safety.mjs';
 import {watchFactory,factoryRequest,measurementText,freshFactory,observationSource} from './factory-client.mjs';
+import {factoryRefresh} from './factory-refresh.mjs';
+import {acceptsRevision} from './outdoor-data.mjs';
 let stopSubscription,serverState,connected=false,replayFrame=null,liveLatest,highlightGroup,highlightNodes=[];
 const embedded=window.parent!==window&&new URLSearchParams(location.search).has('embed');
 const referenceArea=new URLSearchParams(location.search).get('referenceArea');
@@ -138,7 +140,6 @@ async function start(){
     evaluateSafety();
     window.dispatchEvent(new Event('factory-ready'));
     if(embedded){stopSubscription=()=>{};window.parent.postMessage({type:'factory-frame-ready'},location.origin);}else stopSubscription=watchFactory(applyState,disconnect);
-    $('data-refresh')?.addEventListener('click',async()=>{try{applyState(await factoryRequest());}catch(error){disconnect(error);}});
     // Raycast body selection is supplementary; labels remain the primary hover target.
     let down;renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
     renderer.domElement.addEventListener('pointerup',e=>{
@@ -172,7 +173,7 @@ $('factory-export').addEventListener('click',()=>{
 });
 $('export-close').addEventListener('click',()=>$('image-export').close());
 window.addEventListener('pagehide',event=>{if(event.persisted)return;disposed=true;stopSubscription?.();cancelAnimationFrame(frame);controls?.dispose();markers?.dispose();const geometries=new Set(),materials=new Set(),textures=new Set();for(const object of [...cache.values(),...siteModels.values(),...assets.values()])object.traverse(o=>{if(o.geometry)geometries.add(o.geometry);for(const m of [].concat(o.material||[])){materials.add(m);for(const value of Object.values(m))if(value?.isTexture)textures.add(value);}if(o.isInstancedMesh)o.dispose();});geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());renderer?.dispose();});
-function applyState(data, historical=false){if(!historical){liveLatest=data;if(replayFrame)return;}
+function applyState(data, historical=false){if(!historical){if(!acceptsRevision(liveLatest,data))return;liveLatest=data;if(replayFrame)return;}
     if(!ready||!data.entities)return;serverState=data;connected=true;
     const byId=new Map(catalog().map(info=>[info.id,info]));
     for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote','measurementProvenance','positionProvenance'])info[key]=record[key];}
@@ -196,5 +197,6 @@ window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==
 window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.type!=='factory-gis'||!ready)return;if(e.data.action==='reference-reset'&&embedded&&['a','b'].includes(referenceArea)){switchView(referenceArea);fitView();}});
 start().catch(error=>{$('loading').textContent='三维场景加载失败，请刷新重试。';$('scene-error').textContent=error.message;console.error(error);});
 
+factoryRefresh.register('空间观测与列表',{apply:applyState,offline:disconnect});
 window.addEventListener('analysis-replay',e=>{if(!ready)return;replayFrame=e.detail.data;document.body.classList.toggle('replay-mode',!!replayFrame);if(replayFrame)applyState(replayFrame,true);else if(liveLatest)applyState(liveLatest);});
 window.addEventListener('analysis-highlight',e=>{if(!ready)return;const nodes=e.detail.nodes||[],device=catalog().find(i=>i.id===e.detail.root)||nodes.map(n=>catalog().find(i=>i.id===n.id)).find(Boolean);if(!device)return;switchView(device.view);if(highlightGroup){scene.remove(highlightGroup);highlightGroup.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});}highlightGroup=new THREE.Group();for(const node of nodes){const object=root.getObjectByName(node.modelGroup||node.id);if(!object)continue;object.updateWorldMatrix(true,true);const helper=new THREE.Box3Helper(new THREE.Box3().setFromObject(object),0xe8bc61);helper.material.depthTest=false;helper.renderOrder=100;highlightGroup.add(helper);}scene.add(highlightGroup);document.querySelector('.scene-card')?.scrollIntoView({behavior:'smooth',block:'start'});});

@@ -1,4 +1,5 @@
 import {factoryRequest,factorySession,setFactorySession} from './factory-client.mjs';
+import {factoryRefresh} from './factory-refresh.mjs';
 import {initBusinessEvidence} from './business-evidence.mjs';
 const roles={safety:'安全员',maintenance:'维修员',reviewer:'复核员',observer:'只读员',collector:'采集账号',admin:'管理员'};
 const demo=[['demo-safety','SafetyDemo!2026','安全员'],['demo-maintenance','RepairDemo!2026','维修员'],['demo-reviewer','ReviewDemo!2026','复核员'],['demo-observer','ObserveDemo!2026','只读员']];
@@ -26,6 +27,7 @@ export function initDeviceWorkflow(host){
   message(o.statusLabel+' · '+o.rule.basis);
  }
  async function refresh(){const serial=++sequence,id=$('workflow-entity').value,value=await factoryRequest('/workflow/case/'+encodeURIComponent(id)+'?useTestRule='+$('workflow-test-rule').checked);if(serial===sequence)renderCase(value);}
+ factoryRefresh.register('核查依据',{read:async()=>{if(!$('workflow-entity').value)throw new Error('设备台账尚在加载，请稍候重试');await refresh();}});
  function renderDraft(value){draft=value;$('workflow-confirm').disabled=!!value?.case?.maintenanceCheck?.blocked;$('workflow-draft').hidden=!value;if(value)$('workflow-draft-text').textContent=`${value.id} · ${value.entityId} · ${value.reason} · 依据 v${value.case.factoryRevision} / ${value.case.observation.statusLabel} · 尚未创建工单`;}
  async function ask(query){const serial=++sequence;const result=await factoryRequest('/workflow/chat',{query,entityId:$('workflow-entity').value,useTestRule:$('workflow-test-rule').checked});if(serial!==sequence)return;$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);}
  async function accounts(){const session=factorySession();$('workflow-user').textContent=session?.user?`${session.user.name} · ${roles[session.user.role]} · ${session.user.id}`:'未登录 · 可以查询，派单需登录';$('workflow-logout').hidden=!session;
