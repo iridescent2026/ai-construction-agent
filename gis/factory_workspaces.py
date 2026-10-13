@@ -44,7 +44,7 @@ class Workspaces:
     async def __call__(self,scope,receive,send):
         if scope['type']!='http' or scope.get('method')=='OPTIONS' or not scope['path'].startswith('/factory'):
             return await self.app_router(scope,receive,send)
-        request=Request(scope);path=scope['path'];token=request.headers.get('x-demo-workspace')
+        request=Request(scope,receive=receive);path=scope['path'];token=request.headers.get('x-demo-workspace')
         try:
             if path=='/factory/auth/demo-session' and request.method=='POST':
                 return await self.app_router(scope,receive,send)
@@ -64,7 +64,13 @@ class Workspaces:
                 try:command=json.loads(body)
                 except (ValueError,TypeError):raise HTTPException(422,'登录内容必须为有效 JSON')
                 if isinstance(command,dict) and isinstance(command.get('username'),str) and command['username'].startswith('demo-'):raise HTTPException(403,'请先进入个人演示空间')
-                async def replay():return {'type':'http.request','body':body,'more_body':False}
+                replayed=False
+                async def replay():
+                    nonlocal replayed
+                    if not replayed:
+                        replayed=True
+                        return {'type':'http.request','body':body,'more_body':False}
+                    return await receive()
                 return await self.app_router(scope,replay,send)
             return await self.app_router(scope,receive,send)
         except HTTPException as error:return await JSONResponse({'detail':error.detail},status_code=error.status_code)(scope,receive,send)
