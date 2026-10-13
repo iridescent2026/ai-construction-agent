@@ -1,5 +1,6 @@
 """Explicit simulation feed. Never claims or overwrites live telemetry."""
 import math
+import json
 import sqlite3
 import threading
 import uuid
@@ -103,7 +104,12 @@ class DemoFeed:
             with self.analysis.lock,self.analysis.connect() as db:
                 db.execute('CREATE TABLE IF NOT EXISTS demo_feed_readings(id TEXT PRIMARY KEY)')
                 db.executemany('INSERT OR IGNORE INTO demo_feed_readings VALUES (?)',[(r['id'],) for r in readings])
-                ids=[r[0] for r in db.execute('SELECT id FROM demo_feed_readings ORDER BY rowid DESC LIMIT -1 OFFSET 1800')]
+                owned=list(db.execute('SELECT m.id,m.payload FROM meter_readings m JOIN demo_feed_readings d ON m.id=d.id'))
+                # Order by observation time across runs, without SQLite rowid or
+                # LIMIT -1. Only explicit producer-owned samples are pruned.
+                if len(owned)>1800:
+                    owned.sort(key=lambda row:(datetime.fromisoformat(json.loads(row[1])['observedAt']).timestamp(),row[0]),reverse=True)
+                ids=[row[0] for row in owned[1800:]]
                 db.executemany('DELETE FROM meter_readings WHERE id=?',[(id,) for id in ids])
                 db.executemany('DELETE FROM demo_feed_readings WHERE id=?',[(id,) for id in ids])
         self.last_at=clock;self.samples+=1

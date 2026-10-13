@@ -1,4 +1,5 @@
 from datetime import datetime,timezone,timedelta
+import json
 import pytest
 from fastapi import FastAPI,HTTPException
 from fastapi.testclient import TestClient
@@ -52,6 +53,28 @@ def test_real_mode_rejects_feed_and_demo_orders(feed):
     feed.factory.demo_enabled=False
     with pytest.raises(HTTPException):feed.start()
     with pytest.raises(HTTPException):feed.analysis.create_order(OrderCreate(entityId='B-05',reason='演示',actor='模拟',source='demo'))
+
+
+def test_retention_uses_observation_time_and_preserves_unowned_samples(feed):
+    now=datetime.now(timezone.utc)
+    def payload(id,observed):
+        return json.dumps({'id':id,'deviceId':'B-05','observedAt':observed.isoformat(),
+                           'powerKW':6,'running':True,'source':'demo','streamId':'live-demo','shift':'test'})
+    with feed.analysis.connect() as db:
+        db.execute('CREATE TABLE IF NOT EXISTS demo_feed_readings(id TEXT PRIMARY KEY)')
+        # Insert the oldest sample last, as can happen across restarted runs.
+        ids=['owned-'+str(i) for i in range(1801)]
+        db.executemany('INSERT INTO meter_readings VALUES (?,?)',
+                       [(id,payload(id,now-timedelta(seconds=i+5))) for i,id in enumerate(ids)])
+        db.executemany('INSERT INTO demo_feed_readings VALUES (?)',[(id,) for id in ids])
+        db.execute('INSERT INTO meter_readings VALUES (?,?)',('feed-manual',payload('feed-manual',now-timedelta(days=3))))
+    feed.run_id='new';feed.devices=['B-05'];feed.sample(now)
+    with feed.analysis.connect() as db:
+        remaining={row[0] for row in db.execute('SELECT id FROM meter_readings')}
+        owned_count=db.execute('SELECT COUNT(*) FROM demo_feed_readings').fetchone()[0]
+    assert owned_count==1800
+    assert 'feed-manual' in remaining and 'owned-0' in remaining
+    assert 'owned-1799' not in remaining and 'owned-1800' not in remaining
 
 
 def test_autostart_routes_and_two_clients_share_one_stream(tmp_path,monkeypatch):
