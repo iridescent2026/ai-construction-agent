@@ -3,7 +3,7 @@ const areaName=view=>({overview:'全景 · 室外施工',a:'A · 自动化装配
 let catalog=[],selected='',snapshot={active:[],events:[]},safetyKey='';
 function cell(text){const td=document.createElement('td');td.textContent=text;return td;}
 function row(info,values,statusIndex=-1){
-    const tr=document.createElement('tr');tr.dataset.entityId=info.id;tr.dataset.kind=info.kind;tr.classList.toggle('row-selected',selected===info.id);
+    const tr=document.createElement('tr');tr.dataset.entityId=info.id;tr.classList.toggle('row-selected',selected===info.id);
     values.forEach((value,index)=>{const td=cell(value);if(index===0){const strong=document.createElement('strong');strong.textContent=value;td.replaceChildren(strong);}if(index===statusIndex){const badge=document.createElement('span');badge.className='table-status '+(info.riskState==='danger'?'danger':info.riskState==='clear'?'clear':'pending');badge.textContent=value;td.replaceChildren(badge);}if(index===1&&info.kind==='device'&&info.measurementLabel){const reading=document.createElement('small');reading.className='device-reading';reading.textContent=info.measurementLabel;td.appendChild(reading);}tr.appendChild(td);});
     const action=cell(''),button=document.createElement('button');button.className='row-action';button.type='button';button.textContent='定位';button.setAttribute('aria-label',`定位 ${info.id} ${info.title}`);button.addEventListener('click',()=>window.FactoryTwin?.locate(info.id));action.appendChild(button);tr.appendChild(action);return tr;
 }

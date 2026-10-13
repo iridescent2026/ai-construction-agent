@@ -1,12 +1,12 @@
-import {factoryRequest,factorySession} from './factory-client.mjs';
+import {factoryRequest,factorySession,setFactorySession} from './factory-client.mjs';
 import {factoryRefresh} from './factory-refresh.mjs';
 import {initBusinessEvidence} from './business-evidence.mjs';
 const roles={safety:'安全员',maintenance:'维修员',reviewer:'复核员',observer:'只读员',collector:'采集账号',admin:'管理员'};
-
+const demo=[['demo-safety','SafetyDemo!2026','安全员'],['demo-maintenance','RepairDemo!2026','维修员'],['demo-reviewer','ReviewDemo!2026','复核员'],['demo-observer','ObserveDemo!2026','只读员']];
 export function initDeviceWorkflow(host){
  const panel=document.createElement('section');panel.id='device-workflow';panel.className='workflow-console';
  panel.innerHTML=`<div class="workflow-heading"><div><span class="eyebrow">DEVICE INVESTIGATION / B-05</span><h3>设备异常处置 · 核查任务助手</h3><p>观测 → 候选影响 → 人员与作业 → 确认派单 → 维修复核</p></div><button id="workflow-refresh">更新核查依据</button></div>
- <div class="workflow-identity"><span id="workflow-user">读取当前岗位…</span><p>操作沿用顶部登录身份；切换岗位请使用顶部账号菜单。</p></div>
+ <details class="workflow-account" open><summary>操作账号与权限 <span id="workflow-user">未登录 · 可以查询，派单需登录</span></summary><form id="workflow-login"><label>账号<input id="workflow-username" autocomplete="username" maxlength="80" required></label><label>密码<input id="workflow-password" type="password" autocomplete="current-password" required></label><button>登录</button><button type="button" id="workflow-logout" hidden>退出账号</button></form><div id="workflow-demo-accounts" hidden><p>以下为本机原型演示账号，可填入后登录。公开演示密码不能证明真实人员身份；真实模式不启用这些账号。</p><div class="analysis-controls"></div></div></details>
  <div class="analysis-controls"><label>核查设备<select id="workflow-entity"><option value="B-05">B-05 · 循环排水泵组</option></select></label><label class="workflow-test-rule"><input id="workflow-test-rule" type="checkbox"> 使用流程测试条件（60℃，非工程限值）</label><button id="workflow-highlight">查看关联对象</button></div>
  <p id="workflow-status" role="status">正在读取同源观测…</p><div id="workflow-facts" class="workflow-facts"></div><details><summary>最小台账与待核验依据</summary><div id="workflow-ledger"></div></details>
  <div class="workflow-questions analysis-controls"><button data-workflow-question="现在是什么状态？">1 状态</button><button data-workflow-question="可能影响哪里？">2 候选影响</button><button data-workflow-question="涉及哪些人员和作业？">3 人员与作业</button><button data-workflow-question="帮我安排核查任务。">4 核查草案</button><button data-workflow-question="处理后怎么关闭？">5 维修复核</button></div>
@@ -30,11 +30,11 @@ export function initDeviceWorkflow(host){
  factoryRefresh.register('核查依据',{read:async()=>{if(!$('workflow-entity').value)throw new Error('设备台账尚在加载，请稍候重试');await refresh();}});
  function renderDraft(value){draft=value;$('workflow-confirm').disabled=!!value?.case?.maintenanceCheck?.blocked;$('workflow-draft').hidden=!value;if(value)$('workflow-draft-text').textContent=`${value.id} · ${value.entityId} · ${value.reason} · 依据 v${value.case.factoryRevision} / ${value.case.observation.statusLabel} · 尚未创建工单`;}
  async function ask(query){const serial=++sequence;const result=await factoryRequest('/workflow/chat',{query,entityId:$('workflow-entity').value,useTestRule:$('workflow-test-rule').checked});if(serial!==sequence)return;$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);}
- async function accounts(){const session=factorySession();$('workflow-user').textContent=session?.user?`${session.user.name} · ${roles[session.user.role]} · ${session.user.id}`:'未登录 · 可以查询，派单需登录';
+ async function accounts(){const session=factorySession();$('workflow-user').textContent=session?.user?`${session.user.name} · ${roles[session.user.role]} · ${session.user.id}`:'未登录 · 可以查询，派单需登录';$('workflow-logout').hidden=!session;
   if(session){const users=await factoryRequest('/auth/users');$('workflow-assignee').replaceChildren(...users.filter(u=>u.role==='maintenance').map(u=>{const option=node('option',u.name+' · '+u.id);option.value=u.id;return option;}));}else $('workflow-assignee').replaceChildren();
  }
-
-
+ $('workflow-login').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,async()=>{const session=await factoryRequest('/auth/login',{username:$('workflow-username').value,password:$('workflow-password').value});setFactorySession(session);$('workflow-password').value='';message('已登录 '+session.user.name+'，所有工单操作使用账号身份。');});});
+ $('workflow-logout').addEventListener('click',e=>run(e.currentTarget,async()=>{await factoryRequest('/auth/logout',{});setFactorySession(null);renderDraft(null);message('账号已退出。');}));
  $('workflow-refresh').addEventListener('click',e=>run(e.currentTarget,refresh));
  for(const id of ['workflow-entity','workflow-test-rule'])$(id).addEventListener('change',()=>{renderDraft(null);run(null,refresh);});
  $('workflow-ask').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,()=>ask($('workflow-query').value));});
@@ -47,7 +47,7 @@ export function initDeviceWorkflow(host){
  window.addEventListener('factory-select',e=>{if(e.detail?.kind==='device'&&[...$('workflow-entity').options].some(o=>o.value===e.detail.id)){$('workflow-entity').value=e.detail.id;renderDraft(null);run(null,refresh);}});
  run(null,async()=>{const [mode,data]=await Promise.all([factoryRequest('/auth/mode'),factoryRequest()]);$('workflow-test-rule').disabled=!mode.simulationEnabled;const language=$('workflow-language-status');if(language)language.textContent=mode.language?.configured?'大模型分类已配置；实际调用与回退见工具记录，规则与权限仍由后台执行。':'词典与上下文理解；支持多项查询和缺失条件追问，未配置大模型。';
   const entities=data.entities.filter(e=>e.kind==='device'&&(!document.body.classList.contains('factory-home')||e.view!=='overview'));$('workflow-entity').replaceChildren(...entities.map(e=>{const option=node('option',e.id+' · '+e.title);option.value=e.id;return option;}));$('workflow-entity').value='B-05';
-
+  if(mode.demoAccounts){$('workflow-demo-accounts').hidden=false;const controls=$('workflow-demo-accounts').querySelector('.analysis-controls');for(const [id,password,title] of demo){const b=node('button','填入'+title+'演示账号');b.type='button';b.addEventListener('click',()=>{$('workflow-username').value=id;$('workflow-password').value=password;});controls.append(b);}}
   await accounts();await refresh();
  });
 }
