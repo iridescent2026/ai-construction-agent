@@ -46,10 +46,25 @@ timestamp为服务收到观测的UTC时间；source为demo或telemetry。当前�
 ]}
 ```
 
-路线返回闭合巡检顺序、点间距离（米）、按60米/分钟估算的时间（分钟）、solver=OR-Tools、walkability_verified=false。risk字段保留兼容性，当前目标仍为点间距离，**不宣称实现风险优先或安全可通行路径**。
+路线返回闭合巡检顺序、点间距离（米）、按60米/分钟估算的时间（分钟）、solver=OR-Tools、walkability_verified=false。
+2026-10-13 新增可选 `risk_priority_weight`：0～20 的整数，默认 0，保持原有请求的距离目标。
+显式传 5 可兼顾总路程与风险尽早巡检；不保证严格按风险排序，不宣称安全可通行路径。
+风险以 `round(risk × 100)` 的整数权重参与求解，每段距离为逐段取整的球面直线距离。
+目标为 `total_distance + risk_priority_weight × risk_weighted_arrival_distance`；其中风险等待指标
+是巡检点的两位小数风险乘到达距离之和，不计起点及回程起点。返回的 `optimization_score` 与此目标一致。
+仅显式开启风险权重时使用引导局部搜索；搜索最多 2 秒，不保证全局最优。
+新增的 `stops` 与 `route` 一一对应，每站含 `id`、原始 `risk`、`leg_distance`、`arrival_distance`、`arrival_time`。
+首站距离/时间为 0，末站返回起点；末站累计距离和时间等于 `total_distance` 和 `estimated_time`。
+新增字段也会出现在 `/chat` 和 `/chat_llm` 实际路线工具结果中；原有工具状态和无输入提示保持兼容。
 
 - `POST /chat?query=电气设备状态怎么样` 与对应/chat_llm：读取电气快照后用确定性规则总结高、中、关注、正常及未知组。时间超过120秒、时间在未来、无时区/无时间、离线、缺关键数值均归为未知。空数据和接口失败不会回答正常。高/中风险及低风险预警不会被说成全部正常。该结论不经大模型自由改写。
 - 明确的路线和电气问题无密钥也可工作；大模型识别为route/electric的其他表达复用相同执行路径。
+- 明确的“区域/空间风险最高”问题使用 GIS `/state`，返回并列区域和原始精度评分，保留 revision；存在未知人员位置时限定为已知观测结果。
+- “设备风险最高”只比较有效观测。存在未知设备时不声称这是全场最高；没有有效观测时明确无法判断。
+- 未配置模型密钥的通用 `/chat_llm` 请求返回 `success=false`、`needs_configuration=true` 和配置提示，不调用占位密钥。
+- `/risk` 和 `/dashboard` 保留新版快照及不完整数据语义，新增 `gis_max`、`elec_max`（无有效来源时为 null）。
+  来源为空或观测未知时 `data_complete=false`、`overall_risk=null`；不把来源评分四舍五入后分级。
+  区域来源出现非数值、非有限或越界风险评分时返回 503；设备无效/过期/离线观测归入未知组。
 - `/ws/data`转发电气和GIS实际存储的数据，带snapshot_id和revision，不另造模拟值；当前只接受site_a。数据源失败发送data_error。
 
 GIS_API、ELEC_API配置上游地址；AGENT_DB_PATH指定智能体原有日志库。

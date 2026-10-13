@@ -1,6 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Body, Request
 from common.runtime import configure_api, is_fresh, allowed_origins
 from fastapi.responses import StreamingResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 import httpx
 import random
@@ -18,6 +20,15 @@ from openai import OpenAI
 app = FastAPI()
 
 configure_api(app)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(request, error):
+    # 不回显 NaN/Infinity 或 ValueError 上下文，避免校验失败再次触发 JSON 序列化异常。
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": item["loc"], "msg": item["msg"], "type": item["type"]}
+        for item in error.errors()
+    ]})
 
 GIS_API = os.getenv("GIS_API", "http://127.0.0.1:8000")
 ELEC_API = os.getenv("ELEC_API", "http://127.0.0.1:8001")
@@ -174,13 +185,30 @@ async def overview():
         spatial_res.raise_for_status(); electrical_res.raise_for_status()
         spatial,electrical=spatial_res.json(),electrical_res.json()
         zones=spatial["heatmap"]; devices=electrical["devices"]
+        validate_zone_records(zones)
+        if not isinstance(devices, list) or any(not isinstance(device, dict) for device in devices):
+            raise ValueError("设备明细格式无效")
         groups=summarize_devices(devices)["groups"]
         valid=[d for d in devices if d["device_id"] not in groups["未知"]]
-        incomplete=bool(groups["未知"]) or not devices or bool(spatial.get("unknown_people"))
-        known=max([z["risk_score"] for z in zones]+[d["risk_score"] for d in valid],default=0)
+        incomplete=bool(groups["未知"]) or not devices or not zones or bool(spatial.get("unknown_people"))
+        gis_max=max((z["risk_score"] for z in zones),default=None)
+        elec_max=max((d["risk_score"] for d in valid),default=None)
+        known=max((score for score in (gis_max,elec_max) if score is not None),default=0)
+        suggestion="数据不完整，请先核查未知状态"
+        if not incomplete:
+            if gis_max >= 0.7 and elec_max >= 0.7:
+                suggestion="立即疏散高风险区域人员，并检查高风险电气设备，必要时断电处理"
+            elif elec_max >= 0.7:
+                suggestion="立即检查高风险电气设备，必要时断电处理"
+            elif gis_max >= 0.7:
+                suggestion="立即疏散高风险区域人员"
+            elif known >= 0.3:
+                suggestion="加强巡检，关注区域与设备风险"
+            else:
+                suggestion="保持正常监测"
         high_people={r["person_id"] for r in spatial["results"] if r["risk_level"]=="高"}
         return {"overall_risk":None if incomplete else known,"known_risk_score":known,
-                "data_complete":not incomplete,"suggestion":"数据不完整，请先核查未知状态" if incomplete else "按风险等级核查未处理隐患",
+                "data_complete":not incomplete,"suggestion":suggestion,"gis_max":gis_max,"elec_max":elec_max,
                 "total_people":len({p["person_id"] for p in spatial["people"]}),
                 "unknown_people":spatial.get("unknown_people",0),"high_risk_people":len(high_people),
                 "total_devices":len(devices),"high_risk_devices":len(groups["高"]),"unknown_devices":len(groups["未知"]),
@@ -190,6 +218,21 @@ async def overview():
                 "phase":PROGRESS["phase"],"progress_percent":PROGRESS["percent"],"progress_source":"demo_config"}
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         raise HTTPException(503,"上游数据不可用，不能计算当前综合风险")
+
+
+def validate_zone_records(records):
+    """校验来源评分，不把缺失、布尔值和非有限评分当作低风险。"""
+    if not isinstance(records, list):
+        raise ValueError("区域明细必须为列表")
+    for record in records:
+        if not isinstance(record, dict) or not all(isinstance(record.get(key), str) and record[key].strip()
+                                                  for key in ("zone_id", "zone_type", "risk_level")):
+            raise ValueError("区域标识缺失")
+        score=record.get("risk_score")
+        if isinstance(score,bool) or not isinstance(score,(int,float)) or not 0 <= score <= 1 or not m.isfinite(score):
+            raise ValueError("区域风险评分无效")
+        if type(record.get("people_count")) is not int or record["people_count"] < 0:
+            raise ValueError("区域人数无效")
 
 
 @app.get("/risk")
@@ -268,7 +311,7 @@ import math as m
 
 class Point(BaseModel):
     model_config = ConfigDict(allow_inf_nan=False)
-    id: str = Field(min_length=1, max_length=64)
+    id: str = Field(min_length=1, max_length=64, pattern=r"\S")
     lng: float = Field(ge=-180, le=180)
     lat: float = Field(ge=-90, le=90)
     risk: float = Field(default=0.0, ge=0, le=1)
@@ -277,6 +320,8 @@ class Point(BaseModel):
 class RouteRequest(BaseModel):
     points: List[Point] = Field(min_length=2, max_length=100)
     start_id: str
+    # 保持新版现有请求的距离目标；风险偏好必须由调用方明确开启。
+    risk_priority_weight: int = Field(default=0, ge=0, le=20, strict=True)
 
     @model_validator(mode="after")
     def validate_points(self):
@@ -305,12 +350,13 @@ def distance(p1, p2):
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     a = m.sin(dlat/2)**2 + m.cos(lat1)*m.cos(lat2)*m.sin(dlon/2)**2
+    a = min(1.0, max(0.0, a))
     return R * 2 * m.atan2(m.sqrt(a), m.sqrt(1-a))
 
 
 @app.post("/route")
 def optimize_route(req: RouteRequest):
-    """OR-Tools point-distance tour; not a verified walkable site route."""
+    """OR-Tools 点间距离与可选风险偏好；不代表可通行路线。"""
     points = req.points
     n = len(points)
     if n < 2:
@@ -326,32 +372,59 @@ def optimize_route(req: RouteRequest):
         return dist_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)]
 
     transit_callback_index = routing.RegisterTransitCallback(distance_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+    risk_scale = 100
+
+    def cost_callback(from_idx, to_idx):
+        return risk_scale * distance_callback(from_idx, to_idx)
+
+    cost_callback_index = routing.RegisterTransitCallback(cost_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(cost_callback_index)
+    risk_weights = [int(round(point.risk * risk_scale)) for point in points]
+    routing.AddDimension(transit_callback_index, 0, n * max(max(row) for row in dist_matrix), True, "ArrivalDistance")
+    arrival_distance = routing.GetDimensionOrDie("ArrivalDistance")
+    for node, risk_weight in enumerate(risk_weights):
+        if node != start_idx and risk_weight > 0 and req.risk_priority_weight > 0:
+            arrival_distance.SetCumulVarSoftUpperBound(manager.NodeToIndex(node), 0, req.risk_priority_weight * risk_weight)
 
     search_params = pywrapcp.DefaultRoutingSearchParameters()
     search_params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    if req.risk_priority_weight > 0:
+        search_params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
 
     search_params.time_limit.seconds = 2
     solution = routing.SolveWithParameters(search_params)
     if not solution:
         raise HTTPException(422, "未找到巡检顺序")
 
-    route = []
-    total_dist = 0
+    route_nodes = []
     index = routing.Start(0)
     while not routing.IsEnd(index):
         node = manager.IndexToNode(index)
-        route.append(points[node].id)
+        route_nodes.append(node)
         index = solution.Value(routing.NextVar(index))
-        # 终点索引也对应起点，最后一段回程同样计入总距离。
-        total_dist += dist_matrix[node][manager.IndexToNode(index)]
-    route.append(points[start_idx].id)
+    route_nodes.append(start_idx)
+    stops = []
+    total_dist = 0
+    for position, node in enumerate(route_nodes):
+        leg_distance = 0 if position == 0 else dist_matrix[route_nodes[position - 1]][node]
+        total_dist += leg_distance
+        stops.append({"id": points[node].id, "risk": points[node].risk,
+                      "leg_distance": leg_distance, "arrival_distance": total_dist,
+                      "arrival_time": round(total_dist / 60, 1)})
+    weighted_arrival = sum(risk_weights[node] * stop["arrival_distance"]
+                           for node, stop in zip(route_nodes[1:-1], stops[1:-1])) / risk_scale
 
     return {
-        "route": route,
+        "route": [points[node].id for node in route_nodes],
+        "stops": stops,
         "total_distance": total_dist,
         "estimated_time": round(total_dist / 60, 1),
-        "reason": "依据点间距离计算巡检顺序，尚未校验现场通路和禁行区",
+        "reason": "兼顾总路程与高风险点尽早巡检；尚未校验现场通路和禁行区" if req.risk_priority_weight > 0 and any(
+            weight > 0 for node, weight in enumerate(risk_weights) if node != start_idx
+        ) else "依据点间距离计算巡检顺序，尚未校验现场通路和禁行区",
+        "risk_priority_weight": req.risk_priority_weight,
+        "risk_weighted_arrival_distance": weighted_arrival,
+        "optimization_score": solution.ObjectiveValue() / risk_scale,
         "route_type": "point_distance",
         "walkability_verified": False,
         "solver": "OR-Tools"
@@ -381,21 +454,17 @@ def summarize_devices(data, now=None):
     groups = {"高":[], "中":[], "关注":[], "正常":[], "未知":[]}
     for d in data:
         device_id = str(d.get("device_id", "未知设备"))
-        try:
-            timestamp = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00"))
-            age = (now - timestamp).total_seconds()
-            fresh = 0 <= age <= 120
-        except (KeyError, ValueError, TypeError):
-            fresh = False
+        fresh = is_fresh(d, now=now)
         level = d.get("risk_level")
         alert = d.get("alert")
         valid_metrics = all(isinstance(d.get(k), (int,float)) and not isinstance(d.get(k), bool)
                             and m.isfinite(d[k]) for k in ("load","temperature","leakage","risk_score"))
+        valid_metrics = valid_metrics and 0 <= d["risk_score"] <= 1 and d["load"] >= 0 and d["leakage"] >= 0
         if not fresh or d.get("status") != "online" or level not in ("高","中","低") or not valid_metrics or not isinstance(alert,str) or not alert:
             groups["未知"].append(device_id)
-        elif d.get("hard_alert") or level == "高":
+        elif d.get("hard_alert") or level == "高" or d["risk_score"] >= 0.7:
             groups["高"].append(device_id)
-        elif level == "中":
+        elif level == "中" or d["risk_score"] >= 0.3:
             groups["中"].append(device_id)
         elif alert != "正常":
             groups["关注"].append(device_id)
@@ -413,7 +482,11 @@ def summarize_devices(data, now=None):
     return {"answer":answer, "groups":groups}
 
 
-async def electrical_reply(steps):
+def format_risk_score(score):
+    return f"{score:.2f}" if round(score, 2) == score else str(score)
+
+
+async def electrical_reply(steps, highest=False):
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(f"{ELEC_API}/devices")
@@ -423,6 +496,21 @@ async def electrical_reply(steps):
             if not isinstance(data,list) or any(not isinstance(d,dict) for d in data):
                 raise ValueError("Invalid device payload")
             summary = summarize_devices(data)
+            if highest:
+                unknown=set(summary["groups"]["未知"])
+                known=[record for record in data if str(record.get("device_id","未知设备")) not in unknown]
+                if not known:
+                    summary["answer"]="没有可用于比较的有效设备数据，无法判断最高电气风险。"
+                    summary["assessment_available"]=False
+                else:
+                    maximum=max(record["risk_score"] for record in known)
+                    top=[record for record in known if record["risk_score"]==maximum]
+                    summary["answer"]="在有效已知设备中，"+"、".join(str(record["device_id"]) for record in top)+f"电气风险最高，评分{format_risk_score(maximum)}。"
+                    if unknown:
+                        summary["answer"]+=f"另有{len(unknown)}台设备状态未知，不能确认全场最高风险。"
+                    summary["assessment_available"]=True
+                    summary["highest_score"]=maximum
+                    summary["highest_devices"]=[record["device_id"] for record in top]
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         return {"success":False, "intent":"electric", "answer":"无法获取有效设备数据，电气状态未知，请检查连接后重试。",
                 "tool_calls":[], "tool_results":[{"tool":"/devices","status":"error"}], "steps":steps}
@@ -437,10 +525,41 @@ async def risk_reply(steps):
     except HTTPException:
         return {"success":False,"answer":"当前数据源不可用，无法判断风险。","steps":steps,"tool_calls":[]}
     if not data["data_complete"]:
-        answer=f"数据不完整：{data['unknown_people']}人位置过期或未知，{data['unknown_devices']}台设备状态未知，不能判断全场是否安全。"
+        reasons=[]
+        if data['unknown_people']:reasons.append(f"{data['unknown_people']}人位置过期或未知")
+        if data['unknown_devices']:reasons.append(f"{data['unknown_devices']}台设备状态未知")
+        if not data['gis_risk']:reasons.append("没有区域风险明细")
+        if not data['elec_risk']:reasons.append("没有设备风险明细")
+        answer="数据不完整："+"，".join(reasons)+"，不能判断全场是否安全。"
     else:
-        answer=f"当前已知综合风险评分{data['overall_risk']}，高风险设备{data['high_risk_devices']}台、高风险人员{data['high_risk_people']}人。"
+        score=data['overall_risk']
+        level="高风险" if score>=.7 else "中风险" if score>=.3 else "低风险"
+        source="空间与电气风险并列" if data['gis_max']==data['elec_max'] else "空间风险" if data['gis_max']>data['elec_max'] else "电气设备"
+        answer=f"当前已知综合风险评分{format_risk_score(score)}，属于{level}；主要来源：{source}。高风险设备{data['high_risk_devices']}台、高风险人员{data['high_risk_people']}人。建议：{data['suggestion']}。"
     return {"success":True,"answer":answer,"steps":steps,"tool_calls":["/risk"],"tool_results":[{"tool":"/risk","output":data,"status":"success"}]}
+
+
+async def highest_zone_reply(steps):
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response=await client.get(f"{GIS_API}/state")
+            response.raise_for_status()
+            data=response.json()
+        zones=data["heatmap"]
+        validate_zone_records(zones)
+    except (httpx.HTTPError,ValueError,KeyError,TypeError):
+        return {"success":False,"answer":"区域风险数据暂不可用，当前无法判断最高风险区域。","tool_calls":[],
+                "tool_results":[{"tool":"/state","status":"error"}],"steps":steps}
+    if not zones:
+        answer="目前没有区域风险数据，无法判断最高风险区域。"
+    else:
+        maximum=max(zone["risk_score"] for zone in zones)
+        top=[zone for zone in zones if zone["risk_score"]==maximum]
+        answer="基于已知观测，"+"、".join(f"{zone['zone_id']} {zone['zone_type']}（区域内{zone['people_count']}人）" for zone in top)+f"区域风险最高，评分{format_risk_score(maximum)}。"
+        if data.get("unknown_people"):
+            answer+="存在未知或过期人员位置，不能确认全场最高风险。"
+    return {"success":True,"answer":answer,"steps":steps,"revision":data.get("revision"),"tool_calls":["/state"],
+            "tool_results":[{"tool":"/state","status":"success","output":data}]}
 
 
 async def factory_task_reply(query, request=None):
@@ -467,7 +586,9 @@ async def chat(query: str, route_request: RouteRequest | None = Body(default=Non
     factory_reply=await factory_task_reply(query,request)
     if factory_reply is not None:return factory_reply
     if "电气" in query or "配电" in query or "设备" in query:
-        return await electrical_reply(steps)
+        return await electrical_reply(steps, highest=any(word in query for word in ("最高","最危险")))
+    if any(word in query for word in ("最高","最危险")) and any(word in query for word in ("区域","空间","基坑")):
+        return await highest_zone_reply(steps)
 
     async with httpx.AsyncClient() as client:
         if "风险" in query or "危险" in query:
@@ -501,6 +622,7 @@ async def chat(query: str, route_request: RouteRequest | None = Body(default=Non
 async def chat_llm(query: str, session_id: str = "default", route_request: RouteRequest | None = Body(default=None),request:Request=None):
     """用 LLM 做意图识别 + 工具调用（带对话历史）"""
     steps = []
+    confidence = 0.0
     steps.append({"step": 1, "desc": f"解析问题：{query}"})
 
     # Explicit safety requests use deterministic tools even when no LLM key is configured.
@@ -509,7 +631,14 @@ async def chat_llm(query: str, session_id: str = "default", route_request: Route
     factory_reply=await factory_task_reply(query,request)
     if factory_reply is not None:return factory_reply
     if "电气" in query or "配电" in query or "设备" in query:
-        return await electrical_reply(steps)
+        return await electrical_reply(steps, highest=any(word in query for word in ("最高","最危险")))
+    if any(word in query for word in ("最高","最危险")) and any(word in query for word in ("区域","空间","基坑")):
+        return await highest_zone_reply(steps)
+
+    if not DEEPSEEK_KEY:
+        return {"success":False,"needs_configuration":True,"intent":"unknown","confidence":0.0,
+                "answer":"大模型意图识别尚未配置密钥。明确的巡检和电气问题仍可直接调用工具；其他查询可使用 /chat。",
+                "tool_calls":[],"tool_results":[],"steps":steps}
 
     history = sessions[session_id]
 
@@ -573,7 +702,7 @@ async def chat_llm(query: str, session_id: str = "default", route_request: Route
             return await risk_reply(steps)
 
         elif "electric" in intent:
-            return await electrical_reply(steps)
+            return await electrical_reply(steps, highest=any(word in query for word in ("最高","最危险")))
 
         elif "progress" in intent:
             steps.append({"step": 3, "desc": "读取进度数据"})
