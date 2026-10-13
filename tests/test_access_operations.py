@@ -21,6 +21,24 @@ def signin(client, headers, role):
     assert response.status_code==200,response.text
     return {'Authorization':'Bearer '+response.json()['token']}
 
+
+def test_official_admin_login_with_workspace_isolation(tmp_path,monkeypatch):
+    monkeypatch.delenv('DATABASE_URL',raising=False)
+    monkeypatch.delenv('FACTORY_ACCOUNTS_JSON',raising=False)
+    monkeypatch.setenv('FACTORY_DB_PATH',str(tmp_path/'official.db'))
+    monkeypatch.setenv('DEMO_MODE','1')
+    monkeypatch.setenv('DEMO_WORKSPACES_REQUIRED','1')
+    monkeypatch.setenv('FACTORY_ANALYSIS_DEMO','0')
+    monkeypatch.setenv('FACTORY_ADMIN_PASSWORD','LocalAdminTest!2026')
+    app=FastAPI();install_factory(app)
+    with TestClient(app) as client:
+        login=client.post('/factory/auth/login',json={'username':'project-admin','password':'LocalAdminTest!2026'})
+        assert login.status_code==200
+        headers={'Authorization':'Bearer '+login.json()['token']}
+        me=client.get('/factory/auth/me',headers=headers)
+        assert me.status_code==200 and me.json()['role']=='admin'
+        assert client.get('/factory/auth/manage',headers=headers).status_code==200
+
 def workspace(client,role='safety'):
     headers={'X-Demo-Workspace':client.post('/factory/auth/demo-session').json()['workspace']}
     return headers|signin(client,headers,role)
