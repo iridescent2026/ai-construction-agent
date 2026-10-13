@@ -30,7 +30,14 @@ class PostgreSQL:
             if 'IMMEDIATE' in sql.upper():
                 self.db.execute('SELECT pg_advisory_xact_lock(hashtext(%s))',(self.schema,))
             return self.db.execute('SELECT 1')
-        original=sql
+        return self.db.execute(self.translate(sql),parameters)
+    def executemany(self, sql, parameters):
+        # Use the current transaction and the same dialect conversion as single
+        # writes; committing here would break atomic meter/feed updates.
+        cursor=self.db.cursor()
+        cursor.executemany(self.translate(sql),parameters)
+        return cursor
+    def translate(self, sql):
         replace=bool(re.match(r'INSERT OR REPLACE',sql,re.I));ignore=bool(re.match(r'INSERT OR IGNORE',sql,re.I))
         sql=re.sub(r'INSERT OR (?:REPLACE|IGNORE)', 'INSERT', sql, flags=re.I)
         sql=sql.replace('?', '%s')
@@ -43,7 +50,7 @@ class PostgreSQL:
             pk={'analysis_docs':'key','metadata':'key'}.get(table,'id')
             updates=','.join(f'"{c}"=EXCLUDED."{c}"' for c in columns if c!=pk)
             sql+=f' ON CONFLICT ("{pk}") DO UPDATE SET '+updates
-        return self.db.execute(sql,parameters)
+        return sql
     def commit(self):self.db.commit()
     def rollback(self):self.db.rollback()
     def close(self):
