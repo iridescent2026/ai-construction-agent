@@ -1,28 +1,68 @@
 """ASGI isolation for disposable per-browser prototype workspaces."""
 import hashlib, os, secrets, threading, time, asyncio
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 from fastapi.responses import JSONResponse
 from common.database import connect
+class ArchiveCommand(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    workspaceId: str = Field(pattern=r'^[a-f0-9]{64}$')
+    confirmation: Literal['归档过期演示空间','恢复归档记录']
+
 class Workspaces:
     def __init__(self,app,path):
         self.app=app;self.path=path;self.children={};self.lock=threading.RLock();self.creation_times={}
-        with connect(path) as db:db.execute('CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY,expires DOUBLE PRECISION)')
+        with connect(path) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY,expires DOUBLE PRECISION)')
+            db.execute('CREATE TABLE IF NOT EXISTS workspace_archives (id TEXT PRIMARY KEY,actor TEXT NOT NULL,at DOUBLE PRECISION NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS workspace_archive_history (id TEXT PRIMARY KEY,workspace TEXT NOT NULL,actor TEXT NOT NULL,action TEXT NOT NULL,at DOUBLE PRECISION NOT NULL)')
     def create(self,source='local'):
         if not self.app.state.factory.demo_enabled:raise HTTPException(403,'真实项目禁止创建模拟空间')
         token=secrets.token_urlsafe(32);key=hashlib.sha256(token.encode()).hexdigest()
         with self.lock,connect(self.path) as db:
+            db.execute('BEGIN IMMEDIATE')
             recent=[t for t in self.creation_times.get(source,[]) if time.time()-t<3600]
             if len(recent)>=12:raise HTTPException(429,'本网络创建演示空间过于频繁，请使用已创建的空间或稍后再试')
-            if db.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0]>=40:raise HTTPException(429,'已保留的演示空间达到40个上限，请联系项目管理员归档')
-            if db.execute('SELECT COUNT(*) FROM workspaces WHERE expires>?',(time.time(),)).fetchone()[0]>=20:raise HTTPException(429,'演示空间已满，请稍后再试')
+            if db.execute('SELECT COUNT(*) FROM workspaces w WHERE NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)').fetchone()[0]>=40:raise HTTPException(429,'已保留的演示空间达到40个上限，请联系项目管理员归档')
+            if db.execute('SELECT COUNT(*) FROM workspaces w WHERE expires>? AND NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)',(time.time(),)).fetchone()[0]>=20:raise HTTPException(429,'演示空间已满，请稍后再试')
             db.execute('INSERT INTO workspaces VALUES(?,?)',(key,time.time()+86400))
             self.creation_times[source]=[*recent,time.time()]
         return {'workspace':token,'expiresAt':time.time()+86400,'message':'个人模拟空间，24小时有效；与其他访客隔离，正式资料请使用项目账号'}
+    def inventory(self):
+        with self.lock,connect(self.path) as db:
+            rows=db.execute('SELECT w.id,w.expires,a.actor,a.at FROM workspaces w LEFT JOIN workspace_archives a ON a.id=w.id ORDER BY w.expires DESC LIMIT 2000').fetchall()
+            retained=db.execute('SELECT COUNT(*) FROM workspaces w WHERE NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)').fetchone()[0]
+            archived=db.execute('SELECT COUNT(*) FROM workspace_archives').fetchone()[0]
+            history=db.execute('SELECT workspace,actor,action,at FROM workspace_archive_history ORDER BY at DESC LIMIT 500').fetchall()
+        now=time.time()
+        return {'items':[{'id':r[0],'label':r[0][:12],'expiresAt':r[1],'expired':r[1]<=now,'archived':r[3] is not None,'archivedBy':r[2],'archivedAt':r[3]} for r in rows],
+                'retained':retained,'archived':archived,'retainedLimit':40,'activeLimit':20,
+                'history':[{'workspaceId':r[0],'actor':r[1],'action':r[2],'at':r[3]} for r in history],
+                'boundary':'只归档过期演示空间，释放应用数量限额；业务数据库和正式项目不删除，数据库容量不会释放。恢复只取消归档，不延长旧凭据有效期。'}
+    def archive(self,id,user,restore=False):
+        with self.lock,connect(self.path) as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT expires FROM workspaces WHERE id=?',(id,)).fetchone()
+            if not row:raise HTTPException(404,'演示空间不存在')
+            receipt=db.execute('SELECT actor,at FROM workspace_archives WHERE id=?',(id,)).fetchone()
+            if restore:
+                if receipt:
+                    retained=db.execute('SELECT COUNT(*) FROM workspaces w WHERE NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)').fetchone()[0]
+                    if retained>=40:raise HTTPException(409,'保留空间达到40个，请先归档其他过期空间')
+                    db.execute('DELETE FROM workspace_archives WHERE id=?',(id,))
+                    db.execute('INSERT INTO workspace_archive_history VALUES(?,?,?,?,?)',(secrets.token_hex(16),id,user['id'],'restore',time.time()))
+                return {'restored':True,'workspaceId':id,'expiresAt':row[0],'message':'已取消归档；业务记录保留，过期空间和旧登录凭据仍然过期。'}
+            if row[0]>time.time():raise HTTPException(409,'只能归档已过期的演示空间，当前使用中的空间不受影响')
+            if not receipt:
+                at=time.time();db.execute('INSERT INTO workspace_archives VALUES(?,?,?)',(id,user['id'],at));receipt=(user['id'],at)
+                db.execute('INSERT INTO workspace_archive_history VALUES(?,?,?,?,?)',(secrets.token_hex(16),id,user['id'],'archive',at))
+            return {'archived':True,'workspaceId':id,'expiresAt':row[0],'actor':receipt[0],'archivedAt':receipt[1],'message':'已归档过期演示空间；原业务数据保留，可撤销归档。'}
     def child(self,token):
         if len(token)>100:raise HTTPException(401,'演示空间无效')
         key=hashlib.sha256(token.encode()).hexdigest()
         with self.lock:
-            with connect(self.path) as db:row=db.execute('SELECT expires FROM workspaces WHERE id=?',(key,)).fetchone()
+            with connect(self.path) as db:row=db.execute('SELECT expires FROM workspaces w WHERE id=? AND NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)',(key,)).fetchone()
             if not row or row[0]<time.time():raise HTTPException(401,'演示空间已过期，请从登录页重新进入')
             if key not in self.children:
                 from gis.factory import install_factory
@@ -35,7 +75,7 @@ class Workspaces:
             return self.children[key]
     def tick(self):
         with self.lock,connect(self.path) as db:
-            valid={r[0] for r in db.execute('SELECT id FROM workspaces WHERE expires>?',(time.time(),))}
+            valid={r[0] for r in db.execute('SELECT id FROM workspaces w WHERE expires>? AND NOT EXISTS (SELECT 1 FROM workspace_archives a WHERE a.id=w.id)',(time.time(),))}
             self.children={k:child for k,child in self.children.items() if k in valid}
         for child in list(self.children.values()):
             child.state.factory.tick();child.state.factory_demo_feed.tick()
@@ -49,6 +89,7 @@ class Workspaces:
             if path=='/factory/auth/demo-session' and request.method=='POST':
                 return await self.app_router(scope,receive,send)
             if token:
+                if path.startswith('/factory/admin/workspaces'):raise HTTPException(403,'仅正式项目管理员可以管理全局演示空间')
                 child=await asyncio.to_thread(self.child,token)
                 return await child(scope,receive,send)
             public={'/factory/auth/login','/factory/auth/mode','/factory/auth/demo-session'}
@@ -79,6 +120,23 @@ def install_workspaces(app,store):
     app.state.workspaces=manager
     @app.post('/factory/auth/demo-session')
     def create_demo_space(request:Request):return manager.create(request.client.host if request.client else 'local')
+    def official_admin(request):
+        if request.headers.get('x-demo-workspace'):raise HTTPException(403,'仅正式项目管理员可以管理全局演示空间')
+        user=app.state.factory_accounts.require(request,{'admin'})
+        if user['id'].startswith('demo-'):raise HTTPException(403,'演示账号不能管理全局演示空间')
+        return user
+    @app.get('/factory/admin/workspaces')
+    def list_spaces(request:Request):official_admin(request);return manager.inventory()
+    @app.post('/factory/admin/workspaces/archive')
+    def archive_space(command:ArchiveCommand,request:Request):
+        user=official_admin(request)
+        if command.confirmation!='归档过期演示空间':raise HTTPException(422,'请确认归档过期演示空间')
+        return manager.archive(command.workspaceId,user)
+    @app.post('/factory/admin/workspaces/restore')
+    def restore_space(command:ArchiveCommand,request:Request):
+        user=official_admin(request)
+        if command.confirmation!='恢复归档记录':raise HTTPException(422,'请确认恢复归档记录')
+        return manager.archive(command.workspaceId,user,restore=True)
     # Wrap the middleware layer without recursively dispatching the parent app.
     from starlette.middleware.base import BaseHTTPMiddleware
     class Isolation:

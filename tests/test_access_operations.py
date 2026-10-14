@@ -38,6 +38,11 @@ def test_official_admin_login_with_workspace_isolation(tmp_path,monkeypatch):
         me=client.get('/factory/auth/me',headers=headers)
         assert me.status_code==200 and me.json()['role']=='admin'
         assert client.get('/factory/auth/manage',headers=headers).status_code==200
+        assert client.get('/factory/admin/workspaces',headers=headers).status_code==200
+        demo=workspace(client,'admin')
+        assert client.get('/factory/admin/workspaces',headers=demo).status_code==403
+        assert client.get('/factory/admin/workspaces',headers=demo|headers).status_code==403
+        assert client.get('/factory/admin/workspaces').status_code==401
 
 def workspace(client,role='safety'):
     headers={'X-Demo-Workspace':client.post('/factory/auth/demo-session').json()['workspace']}
@@ -160,9 +165,10 @@ def test_restore_does_not_impersonate_review_evidence(system):
     assert tasks['evidencePending']==5 and tasks['reviews'][0]['scope']=='imported_review'
 
 @pytest.mark.parametrize('content,status',[('{"intents":["status","draft"]}','success'),('{"intents":["bypass_auth"]}','fallback'),('not-json','fallback')])
-def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,content,status):
+def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,tmp_path,content,status):
     import gis.workflow_language as language
-    language._RATES.clear();language._DAY=(None,0)
+    monkeypatch.delenv('DATABASE_URL',raising=False)
+    monkeypatch.setenv('WORKFLOW_QUOTA_DB_PATH',str(tmp_path/'quota.db'))
     for k,v in {'WORKFLOW_MODEL_ENABLED':'1','WORKFLOW_MODEL_API_KEY':'test-not-a-real-key','WORKFLOW_MODEL_DAILY_LIMIT':'100'}.items():monkeypatch.setenv(k,v)
     class Response:
         def raise_for_status(self):pass
@@ -178,9 +184,10 @@ def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,con
     result=interpret('不要创建工单，只查询设备状态','B-05','mock')
     assert result['trace']['status']==status and 'draft' not in result['intents']
 
-def test_model_daily_budget_falls_back_without_another_external_call(monkeypatch):
+def test_model_daily_budget_falls_back_without_another_external_call(monkeypatch,tmp_path):
     import gis.workflow_language as language
-    language._RATES.clear();language._DAY=(None,0)
+    monkeypatch.delenv('DATABASE_URL',raising=False)
+    monkeypatch.setenv('WORKFLOW_QUOTA_DB_PATH',str(tmp_path/'quota.db'))
     for k,v in {'WORKFLOW_MODEL_ENABLED':'1','WORKFLOW_MODEL_API_KEY':'test-not-a-real-key','WORKFLOW_MODEL_DAILY_LIMIT':'0'}.items():monkeypatch.setenv(k,v)
     def unexpected(*args,**kwargs):pytest.fail('Must not call a provider after budget is exhausted')
     monkeypatch.setattr(language.httpx,'post',unexpected)
