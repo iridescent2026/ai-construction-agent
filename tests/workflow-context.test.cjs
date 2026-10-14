@@ -48,3 +48,13 @@ test('an earlier confirmation response does not replace the answer to a newer qu
  assert.equal(h.get('workflow-answer').textContent,'latest question');assert.equal(h.get('workflow-entity').value,'B-01');
  assert.equal(h.dispatched[0].type,'workflow-order-created');
 });
+
+test('general chat retains history and clearing it invalidates a pending response',async()=>{
+ const h=await harness();await h.ask('what is calculus',{success:true,intent:'general',answer:'Rates and accumulation',tool_results:[]});
+ await h.ask('give an example',{success:true,intent:'general',answer:'Speed',tool_results:[]});
+ assert.equal(h.requests.at(-1).history.length,2);
+ let resolve;h.replies.push(new Promise(r=>resolve=r));h.get('workflow-query').value='late question';h.get('workflow-ask').listeners.submit({preventDefault(){},submitter:new Element()});
+ h.get('workflow-clear').listeners.click();resolve({success:true,intent:'general',answer:'late answer'});await flush();
+ assert.notEqual(h.get('workflow-answer').textContent,'late answer');
+ await h.ask('new conversation',{success:true,intent:'general',answer:'new',tool_results:[]});assert.equal(h.requests.at(-1).history.length,0);
+});

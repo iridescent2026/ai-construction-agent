@@ -7,16 +7,28 @@ import time
 import uuid
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Literal
 from common.runtime import is_fresh
 from gis.factory_analysis import OrderCreate, OrderAction, WorkPlan, conflicts, seconds
 from gis.factory_business import SCENARIO, evaluate_registered, maintenance_check
+
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    role: Literal['user','assistant']
+    content: str = Field(min_length=1,max_length=4000)
 
 class Chat(BaseModel):
     model_config = ConfigDict(extra='forbid')
     query: str = Field(min_length=1, max_length=2000)
     entityId: str = 'B-05'
     useTestRule: bool = False
+    history: list[ChatMessage] = Field(default_factory=list,max_length=6)
+
+    @model_validator(mode='after')
+    def history_budget(self):
+        if sum(len(m.content) for m in self.history)>12000:raise ValueError('对话上下文过长，请清空对话后再问')
+        return self
 
 class DraftRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -173,6 +185,12 @@ class Workflow:
         import os
         if os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1':self.accounts.require(request)
         parsed=interpret(query,command.entityId,str(self.accounts.path),devices=self.factory.snapshot()['entities']);id=parsed['entityId'];intent=parsed['intent']
+        if parsed.get('outsideScope') and os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1' and os.getenv('WORKFLOW_MODEL_API_KEY'):
+            self.accounts.require(request)
+            from gis.workflow_language import answer_general
+            result=answer_general(query,[m.model_dump() for m in command.history],str(self.accounts.path))
+            traces=([{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else [])+[result['trace']]
+            return {'success':result['success'],'answer':result['answer'],'intent':'general','engine':'deepseek-general-chat','languageEngine':parsed['engine'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'draft':None}
         if parsed['clarification']:
             traces=[{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else []
             return {'success':False,'needsInput':True,'answer':parsed['clarification'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'engine':'rule-tool-orchestrator','languageEngine':parsed['engine']}

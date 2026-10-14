@@ -103,7 +103,7 @@ async def proxy(service:str,path:str,request:Request):
     query=request.url.query
     url='http://127.0.0.1:'+str(PORTS[service])+'/'+path+('?' + query if query else '')
     try:
-        result=await client.request(request.method,url,headers=headers,content=b''.join(chunks))
+        result=await client.request(request.method,url,headers=headers,content=b''.join(chunks),timeout=40 if service=='gis' and path=='factory/workflow/chat' else 20)
     except httpx.HTTPError:return JSONResponse({'detail':'后台服务暂不可用'},status_code=503)
     response_headers={k:v for k,v in result.headers.items() if k.lower() not in HOP_HEADERS}
     response_headers['Cache-Control']='no-store'

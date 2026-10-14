@@ -7,7 +7,7 @@ export async function factoryRequest(path='/state',body){
     let response;
     for(let attempt=0;attempt<(body?1:2);attempt++){
         try{
-            response=await fetch(`${factoryBase}/factory${path}`,{cache:'no-store',signal:AbortSignal.timeout(18000),headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});
+            response=await fetch(`${factoryBase}/factory${path}`,{cache:'no-store',signal:AbortSignal.timeout(path==='/workflow/chat'?45000:18000),headers,...(body?{method:'POST',body:JSON.stringify(body)}:{})});
             if(!body&&response.status===503&&attempt===0)continue;
             break;
         }catch(error){
