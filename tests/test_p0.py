@@ -242,6 +242,7 @@ def test_electrical_tool_integration_and_failure(modules,monkeypatch,endpoint):
 
 def test_llm_classified_route_and_electric_use_same_safe_tools(modules,monkeypatch):
     _, _, a = modules
+    monkeypatch.setattr(a,'DEEPSEEK_KEY','test-only-model-key')
     c=TestClient(a.app)
     for intent in ['route','electric']:
         monkeypatch.setattr(a.llm_client.chat.completions,'create',lambda **kwargs:SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({'intent':intent})))]))
@@ -249,7 +250,7 @@ def test_llm_classified_route_and_electric_use_same_safe_tools(modules,monkeypat
             result=c.post('/chat_llm',params={'query':'请安排一下'},json=ROUTE).json()
             assert result['success'] and result['route_data']['solver']=='OR-Tools'
         else:
-            async def reply(steps): return {'answer':'中风险1台','success':True}
+            async def reply(steps, **kwargs): return {'answer':'中风险1台','success':True}
             monkeypatch.setattr(a,'electrical_reply',reply)
             assert c.post('/chat_llm',params={'query':'箱子状况如何'}).json()['answer']=='中风险1台'
 
