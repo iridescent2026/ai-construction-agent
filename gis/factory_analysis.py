@@ -51,6 +51,9 @@ class Edge(Strict):
     source: str
     target: str
     relation: str = Field(min_length=1, max_length=80)
+    relationKind: Literal['power','fluid','control','spatial','other','unknown'] = 'unknown'
+    direction: Literal['forward','bidirectional','unknown'] = 'unknown'
+    condition: str = Field(default='', max_length=500)
     verified: bool = False
     reference: str = Field(default='', max_length=500)
     reviewer: str = Field(default='', max_length=80)
@@ -336,9 +339,21 @@ class AnalysisStore:
         related=[{**nodes[n],'observation':entities.get(n)} for n in sorted(seen)]
         zone_ids={n for n in seen if nodes[n]['kind']=='zone'}
         people=[e for e in data['entities'] if e['kind']=='person' and e['riskState']!='unknown' and zone_ids.intersection(e.get('currentZones',[]))]
+        # Preserve comprehensive candidate association; a direction only describes
+        # the ledger connection, never proves that this failure propagates.
+        directional={id}
+        for _ in range(3):
+            wave=set(directional)
+            for e in graph['edges']:
+                if e.get('direction')=='forward' and e['source'] in wave:directional.add(e['target'])
+                if e.get('direction')=='bidirectional' and (e['source'] in wave or e['target'] in wave):directional.update([e['source'],e['target']])
+        evidence=[{**e,'direction':e.get('direction','unknown'),'relationKind':e.get('relationKind','unknown'),
+                   'condition':e.get('condition',''),'needsConditionReview':not bool(e.get('condition','').strip()),
+                   'evidenceStatus':'recorded' if e.get('verified') and e.get('reviewScope')=='recorded' else 'candidate'} for e in links]
         return {'root':id,'nodes':related,'edges':links,'people':people,
+            'relationEvidence':evidence,'directionalCandidates':sorted(directional-{id}),
             'orders':[o for o in orders if o['entityId'] in seen],
-            'basis':'双向关联查询，最多三跳；候选连接不证明故障传播。区域人员只取当前有效位置。',
+            'basis':'候选关联最多三跳，含方向未核验的连接；有方向台账另列可达候选，条件须逐项核对。这不是故障传播仿真。区域人员只取当前有效位置。',
             'hasUnverified':not links or any(not e['verified'] or e.get('reviewScope')!='recorded' for e in links),'factoryRevision':data['revision']}
 
     def exposure(self):

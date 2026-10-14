@@ -217,21 +217,17 @@ class Business:
             row.update(status='finished', finishedAt=stamp(), durationSeconds=round(elapsed,3),
                        answer=answer, correctness=fields, score=sum(fields.values()), expected=expected)
             db.execute('UPDATE prototype_runs SET payload=? WHERE id=?',(json.dumps(row,ensure_ascii=False),id))
-            return row
+            return {k:v for k,v in row.items() if k!='expected'}
 
     def report(self, user):
         with self.analysis.connect() as db:
             rows = [json.loads(r[0]) for r in db.execute('SELECT payload FROM prototype_runs WHERE owner=?',(user['id'],))]
         complete = [r for r in rows if r['status']=='finished']
-        pairs = []
-        for task in experiment_tasks():
-            groups = {method:[r for r in complete if r['task']['id']==task['id'] and r['method']==method and r['score']==4] for method in ('manual','system')}
-            if all(groups.values()):
-                means = {k:statistics.median(r['durationSeconds'] for r in v) for k,v in groups.items()}
-                pairs.append({'taskId':task['id'], **means, 'savedSeconds':round(means['manual']-means['system'],3)})
-        return {'runs': rows, 'finished': len(complete), 'fullyCorrect': sum(r['score']==4 for r in complete),
-                'pairedTasks': pairs, 'medianSavedSeconds': statistics.median(p['savedSeconds'] for p in pairs) if pairs else None,
-                'boundary': '服务器记录答题用时，人员身份、学习顺序与实验操作仍需监督；只统计本账号同题且全对的配对，不代表企业效率、安全或成本收益。'}
+        from gis.experiment_statistics import summarize
+        metrics=summarize(rows)
+        return {'runs': [{k:v for k,v in r.items() if k!='expected'} for r in rows], 'finished': len(complete), **metrics, 'fullyCorrect': sum(r['score']==4 for r in complete),
+                'pairedTasks': metrics['correctPairs'], 'medianSavedSeconds': metrics['medianCorrectPairsSavedSeconds'],
+                'boundary': '服务器记录答题用时，人员身份、学习顺序与实验操作仍需监督；错误与未完成次数单列，同题采用第一次完成记录，不代表企业效率、安全或成本收益。'}
 
 def install_business(app, factory, analysis, accounts):
     business = Business(factory, analysis, accounts)

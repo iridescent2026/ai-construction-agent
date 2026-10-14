@@ -68,16 +68,18 @@ def install_operations(app,factory,analysis,accounts):
         import statistics
         accounts.require(request,{'admin','reviewer'})
         with analysis.connect() as db:rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM prototype_runs')]
-        usable=[r for r in rows if r.get('participantDeclaration') and not r.get('restoredFromBackup') and not r['owner'].startswith('demo-') and r['status']=='finished']
-        participants=sorted({r['owner'] for r in usable});pairs=[]
-        for owner in participants:
-            for task in ['fresh_alert','stale','no_trigger','missing']:
-                methods={m:[r for r in usable if r['owner']==owner and r['task']['id']==task and r['method']==m and r['score']==4] for m in ['manual','system']}
-                if all(methods.values()):
-                    times={m:statistics.median(r['durationSeconds'] for r in group) for m,group in methods.items()}
-                    pairs.append({'participant':owner,'taskId':task,**times,'savedSeconds':round(times['manual']-times['system'],3)})
-        return {'declaredParticipants':len(participants),'finishedRuns':len(usable),'fullyCorrect':sum(r['score']==4 for r in usable),'pairs':pairs,'medianSavedSeconds':statistics.median(p['savedSeconds'] for p in pairs) if pairs else None,
-            'readyForPrototypeComparison':len(participants)>=3 and len(pairs)>=12,'boundary':'仅汇总声明由本人完成的独立非演示账号记录；不自动验证身份。至少3位参与者，各做4题两种方法，轮换顺序并监督。练习、自动验收和演示账号不计效果，不推算企业收益。'}
+        from gis.experiment_statistics import summarize
+        eligible=[r for r in rows if r.get('participantDeclaration') and not r.get('restoredFromBackup') and not r['owner'].startswith('demo-')]
+        metrics=summarize(eligible);finished=[r for r in eligible if r['status']=='finished'];participants={r['owner'] for r in eligible}
+        return {'declaredParticipants':len(participants),'finishedRuns':len(finished),'fullyCorrect':sum(r['score']==4 for r in finished),
+                'pairs':metrics['correctPairs'],'medianSavedSeconds':metrics['medianCorrectPairsSavedSeconds'],**metrics,
+                'excludedPracticeOrImported':len(rows)-len(eligible),'readyForPrototypeComparison':metrics['completeParticipants']>=3,
+                'boundary':'仅统计声明本人完成的独立非演示账号，身份与操作由组织者核对。至少3人各完成4题两种方法；同时报告错误、未完成和实际顺序，不把答对样本的时间差当作整体效果。'}
+    @router.get('/model-usage')
+    def model_usage(request:Request):
+        accounts.require(request,{'admin'})
+        from gis.model_quota import ModelQuota
+        return ModelQuota().status()
     @router.get('/backup')
     def backup(request:Request):accounts.require(request,{'admin'});return export()
     @router.post('/restore')

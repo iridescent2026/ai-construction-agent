@@ -17,8 +17,8 @@ function open(key){
 }
 document.querySelector('.command-rail').addEventListener('click',e=>{const button=e.target.closest('[data-drawer]');if(!button)return;const key=button.dataset.drawer;open(key===active?'overview':key);if(key==='overview')window.FactoryTwin?.switchView('overview');});
 window.addEventListener('analysis-navigate',()=>open('overview'));
-window.addEventListener('factory-select',e=>{if(e.detail&&active!=='overview')open('overview');});
-$('drawer-close').addEventListener('click',()=>open('overview'));document.addEventListener('keydown',e=>{if(e.key==='Escape')open('overview');});
+// Selecting a model object keeps the current drawer, filters and list position.
+$('drawer-close').addEventListener('click',()=>open('overview'));document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!window.FactoryLocation?.isOpen())open('overview');});
 document.querySelectorAll('.home-nav a[href^="#"]').forEach(link=>link.addEventListener('click',e=>{const key=Object.keys(sections).find(key=>'#'+sections[key].id===link.getAttribute('href'));if(key){e.preventDefault();open(key);}}));
 function persist(){try{localStorage.setItem('factory-dashboard-layout',JSON.stringify({width,height}));}catch{}}
 function setWidth(value){width=Math.min(480,Math.max(270,Math.round(value)));document.body.style.setProperty('--drawer-width',width+'px');$('drawer-width').value=width;$('drawer-width-value').textContent=width+' px';$('drawer-resize').setAttribute('aria-valuenow',width);persist();}
