@@ -50,3 +50,12 @@ def test_empty_model_answer_is_explicit_failure(system,monkeypatch,tmp_path):
     monkeypatch.setattr(workflow_language.httpx,'post',lambda *a,**k:Empty())
     result=client.post('/factory/workflow/chat',headers=login(client,'observer'),json={'query':'微积分是什么'}).json()
     assert not result['success'] and '稍后重试' in result['answer']
+
+def test_catalogue_status_is_not_diverted_by_general_classification(system,monkeypatch,tmp_path):
+    _,client=system;calls=setup_model(monkeypatch,tmp_path);headers=login(client,'observer')
+    result=client.post('/factory/workflow/chat',headers=headers,json={'query':'cnc运行情况','entityId':'B-05'}).json()
+    assert result['success'] and result['entityId']=='A-02' and result['intent']=='status'
+    assert len(calls)==1 and result['draft'] is None
+    assert result['tool_results'][0]['output']['catalogueRouting']['intent']=='status'
+    concept=client.post('/factory/workflow/chat',headers=headers,json={'query':'CNC是什么','entityId':'B-05'}).json()
+    assert concept['success'] and concept['intent']=='general'

@@ -45,6 +45,12 @@ def interpret(query,entity_id,scope="local",devices=None):
  ids=mentioned_devices(query)
  from gis.device_names import resolve_device_names, default_devices
  candidates,area_mismatch=resolve_device_names(query,devices)
+ # A clear catalogue status query must not be diverted into generic chat just
+ # because the model treats an acronym such as CNC as an unfamiliar term.
+ operational_status=bool(re.search(r'(运行情况|什么状态|正常吗|当前状态|运行状态|状态如何|状态怎么样|状态怎样|状态[？?]?$|温度是多少|压力是多少)',query.strip()))
+ if general_question and operational_status and (ids or candidates or area_mismatch):
+  general_question=False;intents=['status']
+  if trace:trace['output']['catalogueRouting']={'intent':'status','reason':'明确设备名称或编号的状态查询'}
  if area_mismatch:clarification='指定工区内未找到所说的设备名称，请核对设备编号或工区。'
  if ids and candidates and not ids.issubset(candidates):
   clarification='问题中的设备编号与名称不一致，请确认要查询的设备。'
