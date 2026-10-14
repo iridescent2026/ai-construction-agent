@@ -51,6 +51,46 @@ def test_manual_observation_provenance_and_expired_data_never_safe(system):
     assert result['impact']['hasUnverified']
     assert client.post('/factory/observations',json={'observations':[{'id':'B-05','measurements':{'flow':{'value':1,'unit':'m³/h'}}}]},headers=headers).status_code==422
 
+
+def test_natural_device_question_reads_the_requested_device_and_followups(system, monkeypatch):
+    monkeypatch.setenv('WORKFLOW_MODEL_ENABLED','0')
+    app,client=system
+    response=client.post('/factory/workflow/chat',json={'query':'B01什么状态','entityId':'B-05'})
+    assert response.status_code==200
+    result=response.json()
+    assert result['entityId']=='B-01'
+    assert result['case']['observation']['title']=='10kV 高压开关柜'
+    assert {tool['input']['entityId'] for tool in result['tool_results']}=={'B-01'}
+    assert '电压' in result['answer'] and '温度' in result['answer']
+    assert 'voltage' not in result['answer'] and 'temperature' not in result['answer']
+    assert '流量' not in result['answer'] and 'B-05' not in result['answer']
+    assert result['case']['observation']['missingMeasurements']==[]
+    assert '北京时间' in result['answer']
+    followup=client.post('/factory/workflow/chat',json={'query':'它的温度是多少','entityId':result['entityId']}).json()
+    assert followup['entityId']=='B-01'
+    ambiguous=client.post('/factory/workflow/chat',json={'query':'B01和B02什么状态','entityId':'B-05'}).json()
+    assert ambiguous['needsInput'] and ambiguous['tool_calls']==[]
+    assert client.post('/factory/workflow/chat',json={'query':'B99什么状态','entityId':'B-05'}).status_code==404
+    assert not client.get('/factory/analysis').json()['orders']
+
+def test_named_device_questions_and_ambiguity_do_not_change_other_devices(system, monkeypatch):
+    monkeypatch.setenv('WORKFLOW_MODEL_ENABLED', '0')
+    app, client = system
+    for query, expected in [('高压柜正常吗', 'B-01'), ('plc柜运行情况', 'B-04'), ('b区空压机状态', 'B-10')]:
+        response = client.post('/factory/workflow/chat', json={'query': query, 'entityId': 'B-05'})
+        assert response.status_code == 200
+        result = response.json()
+        assert result['entityId'] == expected
+        assert result['case']['observation']['id'] == expected
+    for query in ['空压机状态', 'A区变压器状态', 'b01排水泵状态', '给机器人安排核查任务']:
+        result = client.post('/factory/workflow/chat', json={'query': query, 'entityId': 'B-05'}).json()
+        assert result['needsInput'] and result['tool_calls'] == []
+        assert not result.get('draft')
+    result = client.post('/factory/workflow/chat', json={'query': '高压柜状态，不要创建工单', 'entityId': 'B-05'}).json()
+    assert result['entityId'] == 'B-01' and not result.get('draft')
+    assert not client.get('/factory/analysis').json()['orders']
+
+
 @pytest.mark.parametrize('value,expected',[(40,'test_clear'),(65,'test_alert')])
 def test_flow_test_conditions_are_explicit_and_do_not_create_engineering_rules(system,value,expected):
     app,client=system;headers=login(client,'safety')

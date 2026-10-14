@@ -5,7 +5,7 @@ import json
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from common.runtime import is_fresh
@@ -77,7 +77,8 @@ class Workflow:
             registered=evaluate_registered(entity,docs.get('businessRules',[]),fresh,use_test,clock.timestamp())
             if registered: status,rule=registered['status'],registered['rule']
             names={'pending':'待核验','unknown':'观测缺失或过期，状态未知','test_alert':'触发流程测试条件，待人工核查','test_clear':'未触发流程测试条件，不能证明设备安全','registered_alert':'单项触发已录入规则，待人工核查','registered_clear':'未触发已录入规则，不能证明设备安全'}
-            return {'id':id,'title':entity['title'],'view':entity['view'],'measurements':copy.deepcopy(values),'observedAt':entity.get('measurementTimestamp'),'source':source_label(entity,'measurement'),'provenance':entity.get('measurementProvenance'), 'fresh':fresh,'status':status,'statusLabel':names[status],'rule':rule,'ruleChecks':registered['checks'] if registered else [],'missingMeasurements':['flow'],'missingNote':'流量未接入，不生成估算值'}
+            missing=['flow'] if '泵' in entity['title'] and 'flow' not in values else []
+            return {'id':id,'title':entity['title'],'view':entity['view'],'measurements':copy.deepcopy(values),'observedAt':entity.get('measurementTimestamp'),'source':source_label(entity,'measurement'),'provenance':entity.get('measurementProvenance'), 'fresh':fresh,'status':status,'statusLabel':names[status],'rule':rule,'ruleChecks':registered['checks'] if registered else [],'missingMeasurements':missing,'missingNote':'流量未接入，不生成估算值' if missing else ''}
         obs=tool('get_device_observation', observation)
         def impact_query():
             if not any(n['id']==id for n in docs['graph'].get('nodes',[])):
@@ -171,14 +172,20 @@ class Workflow:
         from gis.workflow_language import interpret
         import os
         if os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1':self.accounts.require(request)
-        parsed=interpret(query,command.entityId,str(self.accounts.path));id=parsed['entityId'];intent=parsed['intent']
+        parsed=interpret(query,command.entityId,str(self.accounts.path),devices=self.factory.snapshot()['entities']);id=parsed['entityId'];intent=parsed['intent']
         if parsed['clarification']:
             traces=[{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else []
             return {'success':False,'needsInput':True,'answer':parsed['clarification'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'engine':'rule-tool-orchestrator','languageEngine':parsed['engine']}
         case=self.case(id,command.useTestRule);obs=case['observation'];draft=None
         if intent=='status':
-            readings='、'.join(f'{k} {m["value"]}{m["unit"]}' for k,m in obs['measurements'].items()) or '没有测量读数'
-            answer=f'{id} {obs["title"]}：{obs["statusLabel"]}。{readings}；来源：{obs["source"]}；采集：{obs["observedAt"] or "未接入"}。{obs["rule"]["basis"]}。流量未接入。'
+            labels={'temperature':'温度','pressure':'压力','voltage':'电压','current':'电流','leakage':'漏电','load':'负荷','speed':'速度','flow':'流量'}
+            readings='、'.join(f'{labels.get(k,k)} {m["value"]}{m["unit"]}' for k,m in obs['measurements'].items()) or '没有测量读数'
+            captured=obs['observedAt'] or '未接入'
+            if obs['observedAt']:
+                try:captured=datetime.fromisoformat(obs['observedAt'].replace('Z','+00:00')).astimezone(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S（北京时间）')
+                except (ValueError,TypeError):pass
+            answer=f'{id} · {obs["title"]}\n当前状态：{obs["statusLabel"]}。\n监测读数：{readings}。\n数据来源：{obs["source"]}；采集时间：{captured}。\n判断依据：{obs["rule"]["basis"]}。'
+            if obs['missingNote']:answer+='\n'+obs['missingNote']+'。'
         elif intent=='impact':
             answer='候选关联：'+('、'.join(n['id']+' '+n['title'] for n in case['impact']['nodes'] if n['id']!=id) or '暂无连接台账')+'。'+case['impact']['basis']+('包含未确认连接，不能认定故障传播。' if case['impact']['hasUnverified'] else '填写依据不等于工程因果验证。')
         elif intent=='people':
