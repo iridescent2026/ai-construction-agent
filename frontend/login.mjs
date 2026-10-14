@@ -14,6 +14,8 @@ async function run(action){$('entry-submit').disabled=true;$('entry-status').tex
 $('entry-login').addEventListener('submit',e=>{e.preventDefault();run(()=>login($('entry-username').value.trim(),$('entry-password').value));});
 $('entry-guest').addEventListener('click',()=>{$('entry-official').checked=false;run(()=>login('demo-observer','ObserveDemo!2026'));});
 $('entry-new').addEventListener('click',()=>{forgetSpace();setFactorySession(null);$('entry-status').textContent='下一次登录将创建另一演示空间；旧数据保留，空闲10分钟后释放运行名额。';});
+$('entry-fill-demo')?.addEventListener('click',()=>{$('entry-official').checked=false;$('entry-username').value='demo-safety';$('entry-password').value='SafetyDemo!2026';$('entry-status').textContent='已填入演示员账号，请点击登录工作台。';});
+$('entry-password-toggle')?.addEventListener('click',()=>{const visible=$('entry-password').type==='password';$('entry-password').type=visible?'text':'password';$('entry-password-toggle').setAttribute('aria-label',visible?'隐藏密码':'显示密码');$('entry-password-toggle').setAttribute('aria-pressed',String(visible));});
 try{const response=await fetch(factoryBase+'/factory/auth/mode',{cache:'no-store'});if(!response.ok)throw new Error('登录服务暂不可用');mode=await response.json();$('login-project').textContent=mode.project;$('entry-storage').textContent=mode.storage?.durable?'外部持久存储已配置；个人演示空间有效24小时。':'当前为临时存储演示，请导出需要保留的结果。';$('entry-demo').hidden=!mode.demoAccounts;
  for(const [id,password,title] of roles){const b=document.createElement('button');b.type='button';b.textContent='填入'+title+'演示账号';b.onclick=()=>{$('entry-official').checked=false;$('entry-username').value=id;$('entry-password').value=password;$('entry-status').textContent='已填入，请点击登录。';};$('entry-roles').append(b);}
 }catch(e){$('entry-status').textContent=e.message;}
