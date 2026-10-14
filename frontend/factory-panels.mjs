@@ -1,7 +1,7 @@
 import {steelPanel} from './industrial-themes.mjs';
 const $=id=>document.getElementById(id),drawer=$('dashboard-drawer'),content=$('drawer-content');
 const sections={devices:$('equipment-management'),people:$('personnel-management'),zones:$('zone-management'),alerts:$('alarm-management'),settings:$('dashboard-settings')};
-const titles={devices:'设备监测',people:'人员管理',zones:'危险区域',alerts:'报警中心',settings:'图层与板块调节'},positions=new Map();let active='overview',width=320,height=560;
+const titles={devices:'设备监测',people:'人员管理',zones:'危险区域',alerts:'人员报警中心',settings:'图层与板块调节'},positions=new Map();let active='overview',width=320,height=560;
 for(const [key,section] of Object.entries(sections)){
     const slot=document.createElement('div');slot.className='module-placeholder';section.before(slot);positions.set(key,slot);
     if(key==='settings')continue;
@@ -17,6 +17,7 @@ function open(key){
 }
 document.querySelector('.command-rail').addEventListener('click',e=>{const button=e.target.closest('[data-drawer]');if(!button)return;const key=button.dataset.drawer;open(key===active?'overview':key);if(key==='overview')window.FactoryTwin?.switchView('overview');});
 window.addEventListener('analysis-navigate',()=>open('overview'));
+window.addEventListener('personnel-alarm-open',()=>open('alerts'));
 // Selecting a model object keeps the current drawer, filters and list position.
 $('drawer-close').addEventListener('click',()=>open('overview'));document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!window.FactoryLocation?.isOpen())open('overview');});
 document.querySelectorAll('.home-nav a[href^="#"]').forEach(link=>link.addEventListener('click',e=>{const key=Object.keys(sections).find(key=>'#'+sections[key].id===link.getAttribute('href'));if(key){e.preventDefault();open(key);}}));

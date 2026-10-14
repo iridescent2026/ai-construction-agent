@@ -2,28 +2,61 @@ const $=id=>document.getElementById(id);
 const areaName=view=>({overview:'全景 · 室外施工',a:'A · 自动化装配',b:'B · 动力设备'}[view]);
 let catalog=[],selected='',snapshot={active:[],events:[]},safetyKey='';
 function cell(text){const td=document.createElement('td');td.textContent=text;return td;}
-function row(info,values,statusIndex=-1){
-    const tr=document.createElement('tr');tr.dataset.entityId=info.id;tr.classList.toggle('row-selected',selected===info.id);
-    values.forEach((value,index)=>{const td=cell(value);if(index===0){const strong=document.createElement('strong');strong.textContent=value;td.replaceChildren(strong);}if(index===statusIndex){const badge=document.createElement('span');badge.className='table-status '+(info.riskState==='danger'?'danger':info.riskState==='clear'?'clear':'pending');badge.textContent=value;td.replaceChildren(badge);}if(index===1&&info.kind==='device'&&info.measurementLabel){const reading=document.createElement('small');reading.className='device-reading';reading.textContent=info.measurementLabel;td.appendChild(reading);}tr.appendChild(td);});
-    const action=cell(''),button=document.createElement('button');button.className='row-action';button.type='button';button.textContent='定位';button.setAttribute('aria-label',`定位 ${info.id} ${info.title}`);button.addEventListener('click',()=>window.FactoryTwin?.locate(info.id));action.appendChild(button);tr.appendChild(action);return tr;
+// Reuse live rows and controls so polling cannot remove a focused button.
+const liveLists=new WeakMap();
+function reconcile(container,items,key,create,update){
+    let nodes=liveLists.get(container);if(!nodes){nodes=new Map();liveLists.set(container,nodes);}
+    const active=new Set();
+    items.forEach((item,index)=>{const id=key(item);active.add(id);let node=nodes.get(id);
+        if(!node){node=create(item);nodes.set(id,node);}update(node,item);
+        if(container.children[index]!==node)container.insertBefore(node,container.children[index]||null);
+    });
+    for(const [id,node] of nodes)if(!active.has(id)){node.remove();nodes.delete(id);}
 }
+function row(info,values,statusIndex=-1){
+    const tr=document.createElement('tr');tr.dataset.entityId=info.id;
+    tr.liveFields=values.map((value,index)=>{const td=cell(''),label=document.createElement(index===0?'strong':'span');td.appendChild(label);tr.appendChild(td);
+        if(index===statusIndex)label.className='table-status';
+        let reading=null;if(index===1&&info.kind==='device'){reading=document.createElement('small');reading.className='device-reading';td.appendChild(reading);}
+        return {label,reading};
+    });
+    const action=cell(''),button=document.createElement('button');button.className='row-action';button.type='button';button.textContent='定位';
+    button.addEventListener('click',()=>window.FactoryTwin?.locate(tr.liveInfo.id));action.appendChild(button);tr.appendChild(action);tr.liveButton=button;
+    return tr;
+}
+function tableRows(container,items,values,statusIndex=-1,empty='暂无记录'){
+    const entries=items.length?items:[{id:'__empty__',empty:true}];
+    reconcile(container,entries,i=>i.id,i=>{if(!i.empty)return row(i,values(i),statusIndex);const tr=document.createElement('tr'),td=cell(empty);td.colSpan=values.columns;tr.appendChild(td);return tr;},(tr,info)=>{
+        if(info.empty)return;tr.liveInfo=info;tr.classList.toggle('row-selected',selected===info.id);
+        values(info).forEach((value,index)=>{const field=tr.liveFields[index];if(field.label.textContent!==value)field.label.textContent=value;
+            if(index===statusIndex)field.label.className='table-status '+(info.riskState==='danger'?'danger':info.riskState==='clear'?'clear':'pending');
+            if(field.reading){const reading=info.measurementLabel||'';if(field.reading.textContent!==reading)field.reading.textContent=reading;field.reading.hidden=!reading;}
+        });
+        tr.liveButton.setAttribute('aria-label',`定位 ${info.id} ${info.title}`);
+    });
+}
+const searchText=value=>String(value).normalize('NFKC').toLowerCase().replace(/(?<![a-z0-9_])([abe])\s*[-‐‑‒–—−]?\s*(\d+)(?![a-z0-9_])/g,(_,prefix,digits)=>prefix+'-'+String(Number(digits)).padStart(2,'0'));
 function render(){
     const devices=catalog.filter(i=>i.kind==='device'),people=catalog.filter(i=>i.kind==='person'),zones=catalog.filter(i=>i.kind==='zone');
-    const query=$('equipment-search').value.trim().toLowerCase(),area=$('equipment-area').value,shown=devices.filter(i=>(area==='all'||i.view===area)&&`${i.id} ${i.title}`.toLowerCase().includes(query));
+    const query=searchText($('equipment-search').value.trim()),area=$('equipment-area').value,shown=devices.filter(i=>(area==='all'||i.view===area)&&searchText(`${i.id} ${i.title}`).includes(query));
     $('metric-devices').textContent=String(devices.length).padStart(2,'0');$('metric-people').textContent=String(people.length).padStart(2,'0');$('metric-zones').textContent=String(zones.length).padStart(2,'0');$('metric-alerts').textContent=String(snapshot.active.length).padStart(2,'0');$('rail-alert-count').textContent=String(snapshot.active.length);$('rail-alert-count').hidden=!snapshot.active.length;
     $('equipment-total').textContent=`${devices.length} 台登记 · ${shown.length} 台显示 · 后台自动同步`;$('personnel-total').textContent=`${people.length} 位编号人员`;$('zone-total').textContent=`${zones.length} 处危险区域`;
     const status=i=>i.riskState==='danger'?`进入 ${i.currentZones.join('、')}`:i.riskState==='unknown'?'位置未知':i.kind==='person'?'未进入限制区':i.mobile?(i.allowedZones?.length?'授权区域作业':'未进入限制区'):i.monitoring||'待接入';
-    $('equipment-rows').replaceChildren(...shown.map(i=>row(i,[i.id,i.title,areaName(i.view),status(i),i.measurementLabel||i.text.replace(/^巡检关注：/,'').replace(' · 场景设计示意','')],3)));
-    if(!shown.length){const tr=document.createElement('tr'),td=cell('没有符合条件的设备');td.colSpan=6;tr.appendChild(td);$('equipment-rows').appendChild(tr);}
-    $('personnel-rows').replaceChildren(...people.map(i=>row(i,[i.id,i.role||i.title,areaName(i.view),status(i)],3)));
-    $('zone-rows').replaceChildren(...zones.map(i=>row(i,[i.id,i.title,areaName(i.view),`${snapshot.active.filter(a=>a.zoneId===i.id).length} 条进入报警${i.devices.length?' · '+i.devices.join('、'):''}`])));
+    const deviceValues=i=>[i.id,i.title,areaName(i.view),status(i),i.measurementLabel||(i.text||'').replace(/^巡检关注：/,'').replace(' · 场景设计示意','')];deviceValues.columns=6;
+    tableRows($('equipment-rows'),shown,deviceValues,3,'没有符合条件的设备');
+    const personValues=i=>[i.id,i.role||i.title,areaName(i.view),status(i)];personValues.columns=5;
+    tableRows($('personnel-rows'),people,personValues,3,'暂无人员记录');
+    const zoneValues=i=>[i.id,i.title,areaName(i.view),`${snapshot.active.filter(a=>a.zoneId===i.id).length} 条进入报警${i.devices.length?' · '+i.devices.join('、'):''}`];zoneValues.columns=5;
+    tableRows($('zone-rows'),zones,zoneValues,-1,'暂无危险区域');
     $('alarm-total').textContent=`${snapshot.active.length} 条${document.body?.classList.contains('replay-mode')?'历史':'当前'}报警 · ${snapshot.events.length} 条记录`;
-    $('alarm-list').replaceChildren(...snapshot.active.map(alarm=>{
+    reconcile($('alarm-list'),snapshot.active.length?snapshot.active:[{id:'__empty__',empty:true}],a=>a.id||a.entityId+':'+a.zoneId,alarm=>{
+        if(alarm.empty){const p=document.createElement('p');p.className='alarm-empty';p.textContent='当前没有区域进入报警。';return p;}
         const card=document.createElement('article');card.className='alarm-card';
-        const icon=document.createElement('span');icon.className='alarm-icon';icon.textContent='!';const content=document.createElement('div'),title=document.createElement('strong'),description=document.createElement('p');title.textContent=`${alarm.entityId} · ${alarm.title}`;description.textContent=`进入 ${alarm.zoneId} ${alarm.zoneTitle}`;const meta=document.createElement('small');meta.textContent=`${areaName(alarm.view)} · ${new Date(alarm.time).toLocaleTimeString('zh-CN',{hour12:false})} · ${alarm.source==='telemetry'?'接口定位':'演示定位'}`;content.appendChild(title);content.appendChild(description);content.appendChild(meta);
-        const button=document.createElement('button');button.className='row-action';button.textContent='定位';button.setAttribute('aria-label',`查看报警 ${alarm.entityId} ${alarm.zoneId}`);button.addEventListener('click',()=>window.FactoryTwin.locate(alarm.entityId));card.appendChild(icon);card.appendChild(content);card.appendChild(button);return card;
-    }));
-    if(!snapshot.active.length){const p=document.createElement('p');p.className='alarm-empty';p.textContent='当前没有区域进入报警。';$('alarm-list').appendChild(p);}
+        const icon=document.createElement('span');icon.className='alarm-icon';icon.textContent='!';const content=document.createElement('div'),title=document.createElement('strong'),description=document.createElement('p'),meta=document.createElement('small');content.appendChild(title);content.appendChild(description);content.appendChild(meta);
+        const button=document.createElement('button');button.className='row-action';button.textContent='定位';button.addEventListener('click',()=>window.FactoryTwin?.locate(card.liveAlarm.entityId));card.appendChild(icon);card.appendChild(content);card.appendChild(button);card.liveParts={title,description,meta,button};return card;
+    },(card,alarm)=>{if(alarm.empty)return;card.liveAlarm=alarm;const {title,description,meta,button}=card.liveParts;
+        title.textContent=`${alarm.entityId} · ${alarm.title}`;description.textContent=`进入 ${alarm.zoneId} ${alarm.zoneTitle}`;meta.textContent=`${areaName(alarm.view)} · ${new Date(alarm.time).toLocaleTimeString('zh-CN',{hour12:false})} · ${alarm.source==='telemetry'?'接口定位':'演示定位'}`;button.setAttribute('aria-label',`查看报警 ${alarm.entityId} ${alarm.zoneId}`);
+    });
     $('alarm-history').replaceChildren(...snapshot.events.map(event=>{const p=document.createElement('p');p.className='event-row '+event.type;p.textContent=`${new Date(event.time).toLocaleTimeString('zh-CN',{hour12:false})} · ${event.entityId} ${event.type==='enter'?'进入':'离开'} ${event.zoneId}`;return p;}));
 }
 function ready(){catalog=window.FactoryTwin.catalog();snapshot=window.FactoryTwin.safetySnapshot?.()||snapshot;render();}

@@ -1,0 +1,99 @@
+/* Shared finishing layer: preserve the original metal shell and brand. */
+body[data-industrial-theme=steel] {
+  --ui-muted: #b1c2cb;
+  --ui-accent: #ebbd63;
+  --ui-surface: #192830;
+}
+body[data-industrial-theme=steel] :is(button,a,input,select,textarea,summary):focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+body[data-industrial-theme=steel] :is(button,input,select,textarea) { font-family: inherit; }
+body[data-industrial-theme=steel] :is(button,input,select) { min-height: 36px; }
+body[data-industrial-theme=steel] :is(input[type=checkbox],input[type=range]) { min-height: auto; }
+body[data-industrial-theme=steel] button:disabled { cursor: not-allowed; opacity: .58; }
+body[data-industrial-theme=steel] header.app-header { height: auto; flex-wrap: wrap; row-gap: 10px !important; }
+.app-header .account-toolbar { min-width: 0; flex-wrap: wrap; }
+.app-header #account-name { overflow-wrap: anywhere; }
+.task-shortcut { color: var(--ui-accent); display: inline-block; margin-left: 12px; text-decoration: underline; text-underline-offset: 4px; }
+.factory-home .page-intro { margin-bottom: 16px; }
+.factory-home .page-intro h1 { font-size: clamp(22px,2.1vw,30px); }
+.factory-home .live-strip { margin-bottom: 16px; flex-wrap: wrap; gap: 10px 20px; }
+.factory-home .home-metrics { gap: 14px; margin-bottom: 18px; }
+.factory-home .home-metrics small { color: var(--ui-muted); font-size: 12px; }
+.factory-home .view-tabs button { min-height: 78px; }
+.factory-home .view-tabs strong { font-size: 14px; }
+.factory-home .view-tabs small { color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+.factory-home .scene-heading { flex-wrap: wrap; gap: 12px; }
+.factory-home .scene-heading > div { margin-right: auto; }
+.factory-home .scene-status { flex-wrap: wrap; gap: 10px 16px; font-size: 12px; }
+.factory-home .scene-footer { flex-wrap: wrap; line-height: 1.6; }
+.factory-home :is(.module-note,.module-count,.table-tools label,.device-reading) { font-size: 12px; line-height: 1.7; }
+.factory-home :is(th,td) { font-size: 13px; padding: 13px 16px; }
+.factory-home th { color: #b8cbd4; font-size: 12px; }
+.factory-home :is(.row-action,.table-status) { font-size: 12px; }
+.factory-home .table-scroll { max-height: 520px; overflow: auto; scrollbar-gutter: stable; }
+.factory-home .table-scroll th { position: sticky; top: 0; z-index: 2; box-shadow: 0 1px #526672; }
+.factory-home #drawer-content .table-scroll { max-height: none; }
+.factory-home #drawer-content table { min-width: 0; }
+.factory-home #drawer-content :is(th,td) { font-size: 12px; }
+.factory-home #drawer-content :is(.table-status,.row-action) { font-size: 11px; }
+.factory-home #drawer-content .module-note { font-size: 12px; }
+.factory-home .alarm-card { align-items: center; }
+.factory-home .alarm-card :is(strong,p,small) { font-size: 12px; line-height: 1.7; }
+.factory-home .my-tasks { scroll-margin-top: 20px; margin: 24px 0; }
+.workflow-console { padding: clamp(16px,2vw,26px); border-width: 1px; border-left-width: 3px; box-shadow: inset 0 1px #fff1,0 8px 24px #0002; }
+.workflow-heading { flex-wrap: wrap; }
+.workflow-heading h3 { font-size: 21px; }
+.workflow-heading p { color: var(--ui-muted); line-height: 1.7; font-size: 13px; }
+.workflow-account { margin: 16px 0; padding: 14px 0; font-size: 13px; }
+.workflow-facts { gap: 12px; }
+.workflow-facts p { font-size: 13px; line-height: 1.8; border-color: #425965; border-radius: 3px; }
+.workflow-facts p:first-child { color: #f4d899; border-left: 3px solid var(--ui-accent); font-weight: 600; }
+.workflow-console .workflow-ask { padding-top: 14px; gap: 12px; }
+.workflow-ask label { display: grid; gap: 8px; font-size: 13px; }
+.workflow-ask input { width: 100%; box-sizing: border-box; padding: 12px 14px; color: #edf2f3; border: 1px solid #6c818d; background: #132129; border-radius: 3px; font-size: 14px; }
+.workflow-ask > button { min-height: 46px; padding: 10px 22px; }
+#workflow-query-help { color: var(--ui-muted); font-size: 12px; line-height: 1.8; }
+#workflow-answer { font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; padding: 18px; }
+.workflow-console details { padding: 12px 0; border-top: 1px solid #40555f; }
+.workflow-console summary { cursor: pointer; color: #d5c196; font-size: 13px; }
+.workflow-draft { border-width: 1px; border-left-width: 4px; line-height: 1.8; }
+.workflow-draft h4 { font-size: 16px; }
+#workflow-confirm { min-height: 44px; margin-top: 12px; font-weight: 600; }
+.gis-layout > .main { min-width: 0; }
+.gis-layout .scene-head { display: flex; flex-wrap: wrap; gap: 16px; }
+.gis-layout .scene-head .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gis-layout .sidebar :is(p,label,dd) { font-size: 12px; line-height: 1.8; }
+.gis-layout .facts dd { overflow-wrap: anywhere; }
+.analysis-controls { flex-wrap: wrap; }
+.analysis-controls > label { min-width: 0; }
+.account-center { scrollbar-gutter: stable; }
+@media (max-width: 1100px) {
+  .factory-home .page-intro { align-items: start; flex-wrap: wrap; gap: 12px; }
+  .factory-home .page-intro p { max-width: none; }
+  .factory-home .view-tabs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .factory-home .home-metrics { gap: 10px; }
+  .gis-layout .scene-head .actions { width: 100%; }
+}
+@media (max-width: 760px) {
+  body[data-industrial-theme=steel] :is(.scene-head,.scene-heading,.module-heading) { padding: 18px 14px !important; }
+  .factory-home .view-tabs button { padding: 12px 10px; min-height: 76px; }
+  .factory-home .view-tabs span { display: none; }
+  .factory-home .view-tabs strong { font-size: 13px; }
+  .factory-home .view-tabs small { font-size: 11px; }
+  .factory-home .home-metrics small { font-size: 11px; }
+  .factory-home .scene-heading h2 { font-size: 17px; }
+  .factory-home .scene-heading > div { flex-basis: 100%; }
+  .factory-home .scene-heading button { flex: 1; }
+  .factory-home .scene-status button { width: 100%; margin-left: 0; }
+  .workflow-facts { grid-template-columns: 1fr; }
+  .workflow-ask > button { width: 100%; }
+  .workflow-console .analysis-controls { gap: 12px; }
+  .task-shortcut { margin: 6px 0 0; display: block; }
+  .app-header .account-toolbar { width: 100%; }
+  .account-center { padding: 18px 14px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :is(.view-tabs button,.row-action,.workflow-ask button) { transition: border-color .15s,background-color .15s; }
+}

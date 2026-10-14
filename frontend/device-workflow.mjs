@@ -1,6 +1,6 @@
 import {factoryRequest,factorySession,setFactorySession} from './factory-client.mjs';
 import {factoryRefresh} from './factory-refresh.mjs';
-import {initBusinessEvidence} from './business-evidence.mjs?v=26';
+import {initBusinessEvidence} from './business-evidence.mjs?v=28';
 const roles={safety:'安全员',maintenance:'维修员',reviewer:'复核员',observer:'只读员',collector:'采集账号',admin:'管理员'};
 export function initDeviceWorkflow(host){
  const panel=document.createElement('section');panel.id='device-workflow';panel.className='workflow-console';
@@ -16,7 +16,7 @@ export function initDeviceWorkflow(host){
  host.querySelector('.module-heading').after(panel);
  initBusinessEvidence(panel);
  const $=id=>panel.querySelector('#'+id),node=(tag,value)=>{const n=document.createElement(tag);n.textContent=value;return n;};
- let current=null,draft=null,sequence=0;
+ let current=null,draft=null,sequence=0,externalToken=null;
  function message(value,bad=false){$('workflow-status').textContent=value;$('workflow-status').classList.toggle('error',bad);}
  async function run(button,operation){if(button)button.disabled=true;try{await operation();}catch(e){message(e.message,true);}finally{if(button)button.disabled=false;}}
  function renderCase(value){current=value;const o=value.observation,names={temperature:'温度',pressure:'压力',voltage:'电压',current:'电流',leakage:'漏电',load:'负荷'},readings=Object.entries(o.measurements).map(([k,m])=>(names[k]||k)+' '+m.value+m.unit).join(' · ')||'无读数';
@@ -26,23 +26,24 @@ export function initDeviceWorkflow(host){
   $('workflow-tools').replaceChildren(...value.toolResults.map(t=>node('p',`${t.tool} · ${t.status} · 观测 v${t.factoryRevision}${t.elapsedMs==null?'':' · '+t.elapsedMs+' ms'} · 输入 ${JSON.stringify(t.input)} · 结果 ${JSON.stringify(t.output)}`)));
   message(o.statusLabel+' · '+o.rule.basis);
  }
- async function refresh(){const serial=++sequence,id=$('workflow-entity').value,value=await factoryRequest('/workflow/case/'+encodeURIComponent(id)+'?useTestRule='+$('workflow-test-rule').checked);if(serial===sequence)renderCase(value);}
+ async function refresh(){externalToken=null;const serial=++sequence,id=$('workflow-entity').value,value=await factoryRequest('/workflow/case/'+encodeURIComponent(id)+'?useTestRule='+$('workflow-test-rule').checked);if(serial===sequence)renderCase(value);}
  factoryRefresh.register('核查依据',{read:async()=>{if(!$('workflow-entity').value)throw new Error('设备台账尚在加载，请稍候重试');await refresh();}});
- function renderDraft(value){draft=value;$('workflow-confirm').disabled=!!value?.case?.maintenanceCheck?.blocked;$('workflow-draft').hidden=!value;if(value)$('workflow-draft-text').textContent=`${value.id} · ${value.entityId} · ${value.reason} · 依据 v${value.case.factoryRevision} / ${value.case.observation.statusLabel} · 尚未创建工单`;}
- async function ask(query){const serial=++sequence;renderDraft(null);const result=await factoryRequest('/workflow/chat',{query,entityId:$('workflow-entity').value,useTestRule:$('workflow-test-rule').checked});if(serial!==sequence)return;$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);}
+ function renderDraft(value){draft=value;$('workflow-confirm').disabled=!value||!!value?.case?.maintenanceCheck?.blocked;$('workflow-confirm').textContent=value?'确认 '+value.entityId+' 核查任务':'确认并创建核查工单';$('workflow-draft').hidden=!value;if(value)$('workflow-draft-text').textContent=`${value.id} · ${value.entityId} · ${value.reason} · 依据 v${value.case.factoryRevision} / ${value.case.observation.statusLabel} · 尚未创建工单`;}
+ async function ask(query){externalToken=null;const serial=++sequence;renderDraft(null);const result=await factoryRequest('/workflow/chat',{query,entityId:$('workflow-entity').value,useTestRule:$('workflow-test-rule').checked});if(serial!==sequence)return;$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);}
  async function accounts(){const session=factorySession();$('workflow-user').textContent=session?.user?`${session.user.name} · ${roles[session.user.role]} · ${session.user.id}`:'未登录 · 可以查询，派单需登录';
   if(session){const users=await factoryRequest('/auth/users');$('workflow-assignee').replaceChildren(...users.filter(u=>u.role==='maintenance').map(u=>{const option=node('option',u.name+' · '+u.id);option.value=u.id;return option;}));}else $('workflow-assignee').replaceChildren();
  }
  $('workflow-refresh').addEventListener('click',e=>run(e.currentTarget,refresh));
- for(const id of ['workflow-entity','workflow-test-rule'])$(id).addEventListener('change',()=>{renderDraft(null);run(null,refresh);});
+ for(const id of ['workflow-entity','workflow-test-rule'])$(id).addEventListener('change',()=>{externalToken=null;renderDraft(null);run(null,refresh);});
  $('workflow-ask').addEventListener('submit',e=>{e.preventDefault();run(e.submitter,()=>ask($('workflow-query').value));});
  panel.querySelectorAll('[data-workflow-question]').forEach(b=>b.addEventListener('click',()=>run(b,()=>ask($('workflow-entity').value+' '+b.dataset.workflowQuestion))));
  $('workflow-highlight').addEventListener('click',()=>{if(current)window.dispatchEvent(new CustomEvent('analysis-highlight',{detail:current.impact}));});
- $('workflow-confirm').addEventListener('click',e=>run(e.currentTarget,async()=>{if(!draft)throw new Error('请先生成核查草案');const result=await factoryRequest('/workflow/drafts/'+draft.id+'/confirm',{assignee:$('workflow-assignee').value});renderDraft(null);$('workflow-answer').textContent=`${result.alreadyConfirmed?'此前已经创建':'已创建并指派'} ${result.order.id} → ${result.order.assignee}。尚未执行现场处理，请在维修闭环中继续。`;window.dispatchEvent(new CustomEvent('workflow-order-created',{detail:result.order}));await refresh();}));
- window.addEventListener('factory-auth-change',()=>{sequence++;renderDraft(null);run(null,accounts);});
- window.addEventListener('business-evidence-change',()=>{renderDraft(null);run(null,refresh);});
- window.addEventListener('workflow-chat-result',e=>{const result=e.detail;$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);});
- window.addEventListener('factory-select',e=>{if(e.detail?.kind==='device'&&[...$('workflow-entity').options].some(o=>o.value===e.detail.id)){$('workflow-entity').value=e.detail.id;renderDraft(null);run(null,refresh);}});
+ $('workflow-confirm').addEventListener('click',e=>run(e.currentTarget,async()=>{if(!draft)throw new Error('请先生成核查草案');const confirmedDraft=draft,serial=sequence;renderDraft(null);const result=await factoryRequest('/workflow/drafts/'+confirmedDraft.id+'/confirm',{assignee:$('workflow-assignee').value});window.dispatchEvent(new CustomEvent('workflow-order-created',{detail:result.order}));if(serial!==sequence)return;$('workflow-answer').textContent=`${result.alreadyConfirmed?'此前已经创建':'已创建并指派'} ${result.order.id} → ${result.order.assignee}。尚未执行现场处理，请在维修闭环中继续。`;await refresh();}));
+ window.addEventListener('factory-auth-change',()=>{sequence++;externalToken=null;renderDraft(null);run(null,accounts);});
+ window.addEventListener('business-evidence-change',()=>{externalToken=null;renderDraft(null);run(null,refresh);});
+ window.addEventListener('workflow-request-start',e=>{sequence++;externalToken=e.detail.token;renderDraft(null);});
+ window.addEventListener('workflow-chat-result',e=>{const result=e.detail;if(result.token&&result.token!==externalToken)return;sequence++;externalToken=null;renderDraft(null);$('workflow-answer').textContent=result.answer;if(result.case)renderCase(result.case);if(result.draft)renderDraft(result.draft);});
+ window.addEventListener('factory-select',e=>{if(e.detail?.kind==='device'&&[...$('workflow-entity').options].some(o=>o.value===e.detail.id)){externalToken=null;$('workflow-entity').value=e.detail.id;renderDraft(null);run(null,refresh);}});
  run(null,async()=>{const [mode,data]=await Promise.all([factoryRequest('/auth/mode'),factoryRequest()]);$('workflow-test-rule').disabled=!mode.simulationEnabled;const language=$('workflow-language-status');if(language)language.textContent=mode.language?.configured?'大模型分类已配置；实际调用与回退见工具记录，规则与权限仍由后台执行。':'词典与上下文理解；支持多项查询和缺失条件追问，未配置大模型。';
   const entities=data.entities.filter(e=>e.kind==='device'&&(!document.body.classList.contains('factory-home')||e.view!=='overview'));$('workflow-entity').replaceChildren(...entities.map(e=>{const option=node('option',e.id+' · '+e.title);option.value=e.id;return option;}));$('workflow-entity').value='B-05';
   await accounts();await refresh();

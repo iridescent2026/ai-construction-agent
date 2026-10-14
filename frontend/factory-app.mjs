@@ -1,3 +1,4 @@
+import {personnelSafetySnapshot} from './personnel-alarms.mjs?v=29';
 import {InspectionWalk} from './inspection-walk.mjs';
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/three/OrbitControls.js';
@@ -128,7 +129,13 @@ async function start(){
     $('asset-status').textContent=`${assets.size} / ${names.length} 开源资产已载入`;
     if(failures)$('scene-error').textContent=`${failures} 个资产未载入，已使用补充几何模型。刷新页面可重试。`;
     for(const view of Object.keys(VIEWS))cache.set(view,buildFactory(view,assets));
-    const [site,siteLayout]=await Promise.all(['reference-site.json','factory-plan.geojson'].map(async name=>{const response=await fetch('assets/factory/'+name);if(!response.ok)throw new Error('厂区轮廓加载失败');return response.json();}));
+    const [site,siteLayout]=await Promise.all(['reference-site.json','factory-plan.geojson'].map(async name=>{
+        // A transient read failure must not disable the whole inspection scene.
+        for(let attempt=0;attempt<3;attempt++){
+            let response;try{response=await fetch('assets/factory/'+name,{signal:AbortSignal.timeout(10000)});}catch(error){if(attempt===2)throw error;await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));continue;}
+            if(!response.ok)throw new Error('厂区轮廓加载失败');return response.json();
+        }
+    }));
     siteModels.set('overview',buildFactorySite(site,siteLayout,assets));siteModels.set('section',buildFactorySite(site,siteLayout,assets,{cutaway:true}));
     for(const info of catalog())if(info.kind==='person'||info.mobile){info.riskState='unknown';info.currentZones=[];}
     ready=true;switchView(embedded&&['a','b'].includes(referenceArea)?referenceArea:'overview');$('loading').hidden=true;render();
@@ -143,8 +150,9 @@ async function start(){
     window.dispatchEvent(new Event('factory-ready'));
     if(embedded){stopSubscription=()=>{};window.parent.postMessage({type:'factory-frame-ready'},location.origin);}else stopSubscription=watchFactory(applyState,disconnect);
     // Raycast body selection is supplementary; labels remain the primary hover target.
-    let down;renderer.domElement.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+    let down;renderer.domElement.addEventListener('pointerdown',e=>down=walk?.active?null:[e.clientX,e.clientY]);
     renderer.domElement.addEventListener('pointerup',e=>{
+        if(walk?.active){down=null;return;}
         if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;
         const rect=renderer.domElement.getBoundingClientRect(),ray=new THREE.Raycaster();ray.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),camera);
         for(const hit of ray.intersectObject(root,true)){
@@ -180,7 +188,7 @@ function applyState(data, historical=false){if(!historical){if(!acceptsRevision(
     if(!ready||!data.entities)return;serverState=data;connected=true;
     const byId=new Map(catalog().map(info=>[info.id,info]));
     for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote','measurementProvenance','positionProvenance'])info[key]=record[key];}
-    snapshot={active:data.active.filter(a=>a.view!=='overview'),events:data.events.filter(e=>e.view!=='overview'),added:[],people:catalog().filter(e=>e.kind==='person').length};
+    snapshot=personnelSafetySnapshot(data);
     stage.dataset.revision=data.revision;renderer.shadowMap.needsUpdate=true;evaluateSafety();
     window.dispatchEvent(new CustomEvent('factory-data-update',{detail:data}));
     window.dispatchEvent(new CustomEvent('factory-demo-change',{detail:{running:!!data.demo&&['a','b'].includes(data.demo.key),key:data.demo?.key,id:data.demo?.id}}));

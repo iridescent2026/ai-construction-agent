@@ -2,7 +2,7 @@ import {steelPanel} from './industrial-themes.mjs';
 import {factoryRequest,measurementText,factoryBase,factorySession,observationSource} from './factory-client.mjs';
 import {factoryRefresh} from './factory-refresh.mjs';
 import {reconcileOrderList} from './live-buttons.mjs';
-import {initDeviceWorkflow} from './device-workflow.mjs?v=26';
+import {initDeviceWorkflow} from './device-workflow.mjs?v=28';
 const host=document.getElementById('factory-analysis');
 const names={open:'待指派',assigned:'已指派',in_progress:'处理中',pending_review:'待复核',closed:'已关闭'};
 let summary,impact,order,frames=[],timer,stopped=false,frameRequest=0,impactRequest=0,syncFeedControls=()=>{};

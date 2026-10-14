@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 test('homepage table filtering and location actions use the same factory catalogue without invented telemetry',()=>{
     class Element{
         constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.dataset={};this.textContent='';this.value='';this.attributes={};this.listeners={};this.classes=new Set();this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name)};}
-        appendChild(el){this.children.push(el);return el;}replaceChildren(...children){this.children=children;}setAttribute(k,v){this.attributes[k]=v;}addEventListener(type,fn){this.listeners[type]=fn;}
+        appendChild(el){el.remove?.();el.parentNode=this;this.children.push(el);return el;}insertBefore(el,before){el.remove();el.parentNode=this;const index=before?this.children.indexOf(before):this.children.length;this.children.splice(index,0,el);}remove(){if(this.parentNode){const index=this.parentNode.children.indexOf(this);this.parentNode.children.splice(index,1);this.parentNode=null;}}replaceChildren(...children){this.children=children;}setAttribute(k,v){this.attributes[k]=v;}addEventListener(type,fn){this.listeners[type]=fn;}
     }
     const elements=new Map(),node=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);},events={},located=[];
     node('equipment-area').value='all';
@@ -15,6 +15,16 @@ test('homepage table filtering and location actions use the same factory catalog
     node('equipment-area').value='b';node('equipment-area').listeners.change();assert.equal(node('equipment-rows').children.length,1);assert.equal(node('equipment-rows').children[0].dataset.entityId,'B-03');
     node('equipment-rows').children[0].children.at(-1).children[0].listeners.click();assert.deepEqual(located,['B-03']);
     events['factory-select']({detail:catalog[1]});assert.ok(node('equipment-rows').children[0].classes.has('row-selected'));
+    const buttonBefore=node('equipment-rows').children[0].children.at(-1).children[0];
+    catalog[1].measurements={temperature:{value:42,unit:'℃'}};catalog[1].measurementTimestamp=new Date().toISOString();
+    events['factory-data-update']({detail:{updatedAt:new Date().toISOString()}});
+    assert.equal(node('equipment-rows').children[0].children.at(-1).children[0],buttonBefore);
+    for(const query of ['b03','B3','Ｂ－０３']){node('equipment-search').value=query;node('equipment-search').listeners.input();assert.equal(node('equipment-rows').children[0].dataset.entityId,'B-03');}
+    const active={id:'alert-1',entityId:'P002',title:'人员',zoneId:'Z006',zoneTitle:'阀门操作区',view:'b',time:new Date().toISOString(),source:'demo'};
+    events['factory-safety-update']({detail:{active:[active],events:[]}});const alarmButton=node('alarm-list').children[0].children.at(-1);
+    events['factory-data-update']({detail:{updatedAt:new Date().toISOString()}});
+    assert.equal(node('alarm-list').children[0].children.at(-1),alarmButton);
+    events['factory-safety-update']({detail:{active:[],events:[]}});assert.equal(node('alarm-list').children[0].className,'alarm-empty');
     node('equipment-search').value='不存在';node('equipment-search').listeners.input();assert.equal(node('equipment-rows').children[0].children[0].colSpan,6);
     node('personnel-rows').children[0].children.at(-1).children[0].listeners.click();node('zone-rows').children[0].children.at(-1).children[0].listeners.click();assert.deepEqual(located,['B-03','P002','Z006']);
 });

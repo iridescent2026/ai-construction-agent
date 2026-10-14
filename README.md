@@ -1,5 +1,7 @@
 # 工安智瞳
 
+> 2026-10-14 源码修复版：设备名称识别、草案上下文、连续巡视、刷新稳定性和界面整理。详见 [修改说明](修改说明.md)。
+
 设备异常与人员作业协同核查原型。以 B-05 泵组连接观测、候选台账、人员作业、人工确认工单和异账号维修复核；A/B与GIS用作定位和证据查看。默认场景、内部模型与采样为演示配置，尚无现场试点。
 
 [公网首页](https://gongan-zhitong-demo.onrender.com/) · [GIS工作台](https://gongan-zhitong-demo.onrender.com/workbench.html)
