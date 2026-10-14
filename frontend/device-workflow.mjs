@@ -17,7 +17,7 @@ export function initDeviceWorkflow(host){
  initBusinessEvidence(panel);
  const $=id=>panel.querySelector('#'+id),node=(tag,value)=>{const n=document.createElement(tag);n.textContent=value;return n;};
  let current=null,draft=null,sequence=0,history=[];
- function clearConversation(){history=[];$('workflow-history').replaceChildren();}
+ function clearConversation(){sequence++;history=[];$('workflow-history').replaceChildren();$('workflow-answer').textContent='对话已清空，可以提出新的问题。';}
  $('workflow-clear').addEventListener('click',clearConversation);
  function message(value,bad=false){$('workflow-status').textContent=value;$('workflow-status').classList.toggle('error',bad);}
  async function run(button,operation){if(button)button.disabled=true;try{await operation();}catch(e){message(e.message,true);}finally{if(button)button.disabled=false;}}
