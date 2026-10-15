@@ -32,6 +32,7 @@ def test_global_quota_atomic_across_instances_and_restart(tmp_path, monkeypatch)
 
 
 def test_scope_minute_rate_and_failed_provider_consumes_attempt(tmp_path,monkeypatch):
+    monkeypatch.setenv('WORKFLOW_TEMPLATE_FIRST','0')
     quota=ModelQuota(tmp_path/'quota.db')
     for _ in range(6):quota.acquire('one',now=1000)
     with pytest.raises(QuotaLimit):quota.acquire('one',now=1001)

@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const areaName=view=>({overview:'全景 · 室外施工',a:'A · 自动化装配',b:'B · 动力设备'}[view]);
-let catalog=[],selected='',snapshot={active:[],events:[]},safetyKey='';
+let catalog=[],selected='',snapshot={active:[],events:[]},safetyKey='',activeDemoKey=null;
 function cell(text){const td=document.createElement('td');td.textContent=text;return td;}
 // Reuse live rows and controls so polling cannot remove a focused button.
 const liveLists=new WeakMap();
@@ -64,11 +64,13 @@ $('equipment-search').addEventListener('input',render);$('equipment-area').addEv
 window.addEventListener('factory-ready',ready);
 window.addEventListener('factory-select',e=>{selected=e.detail?.id||'';render();$('home-status').textContent=e.detail?`已定位 ${selected} · ${e.detail.title} · x=${e.detail.anchor?.[0]?.toFixed(1)} / z=${e.detail.anchor?.[2]?.toFixed(1)} m，位置与来源见场景详情。`:'';});
 window.addEventListener('factory-safety-update',e=>{snapshot=e.detail;const key=JSON.stringify([snapshot.active.map(i=>[i.id,i.state]),catalog.filter(i=>i.kind==='person'||i.mobile).map(i=>i.riskState),snapshot.events[0]?.id]);if(key!==safetyKey){safetyKey=key;render();}});
-window.addEventListener('factory-demo-change',e=>{$('demo-start').disabled=e.detail.running;$('demo-stop').disabled=!e.detail.running;$('demo-status').textContent=e.detail.running?`${e.detail.id} 正在移动 · 区域进入判断运行中`:'后台每秒采样 · 页面自动同步';});
-$('demo-start').addEventListener('click',()=>window.FactoryTwin?.startDemo($('demo-source').value));$('demo-stop').addEventListener('click',()=>window.FactoryTwin?.stopDemo());$('demo-reset').addEventListener('click',()=>{window.FactoryTwin?.resetDemo();$('demo-status').textContent='已恢复初始模拟位置';});
+window.addEventListener('factory-demo-change',e=>{activeDemoKey=e.detail.running?e.detail.key:null;$('demo-start').disabled=e.detail.running&&activeDemoKey===$('demo-source').value;$('demo-stop').disabled=!e.detail.running;$('demo-status').textContent=e.detail.running?`${e.detail.view==='overview'?'室外':'室内 '+e.detail.view.toUpperCase()+' 区'} · ${(e.detail.ids||[e.detail.id]).join(' / ')} 正在移动`:'后台每秒采样 · 页面自动同步';});
+$('demo-start').addEventListener('click',()=>window.FactoryTwin?.startDemo($('demo-source').value));$('demo-stop').addEventListener('click',()=>window.FactoryTwin?.stopDemo());$('demo-reset').addEventListener('click',async()=>{const ok=await window.FactoryTwin?.resetDemo();if(ok)$('demo-status').textContent='已恢复所选路线的初始位置，其他路线保持不变';});
 if(window.FactoryTwin)ready();
 
-window.addEventListener('factory-data-update',e=>{const names={temperature:'温度',load:'负荷',pressure:'压力',current:'电流',voltage:'电压',leakage:'漏电',speed:'速度'};for(const info of catalog){if(info.kind==='device'){info.measurementLabel=Object.entries(info.measurements||{}).map(([k,m])=>`${names[k]||k} ${m.value}${m.unit}`).join(' · ');const clock=document.body?.classList.contains('replay-mode')?Date.parse(e.detail.updatedAt):Date.now(),age=clock-Date.parse(info.measurementTimestamp);info.monitoring=!Number.isFinite(age)||age < -5000||age>120000?'观测过期':info.measurementSource==='telemetry'?(info.measurementProvenance?.kind==='manual'?'手动测试导入':info.measurementProvenance?.kind==='authenticated_import'?'采集账号导入':'接口来源未核验'):'演示监测';}}render();});
+window.addEventListener('factory-data-update',e=>{catalog=window.FactoryTwin?.catalog()||catalog;const names={temperature:'温度',load:'负荷',pressure:'压力',current:'电流',voltage:'电压',leakage:'漏电',speed:'速度'};for(const info of catalog){if(info.kind==='device'){info.measurementLabel=Object.entries(info.measurements||{}).map(([k,m])=>`${names[k]||k} ${m.value}${m.unit}`).join(' · ');const clock=document.body?.classList.contains('replay-mode')?Date.parse(e.detail.updatedAt):Date.now(),age=clock-Date.parse(info.measurementTimestamp);info.monitoring=!Number.isFinite(age)||age < -5000||age>120000?'观测过期':info.measurementSource==='telemetry'?(info.measurementProvenance?.kind==='manual'?'手动测试导入':info.measurementProvenance?.kind==='authenticated_import'?'采集账号导入':'接口来源未核验'):'演示监测';}}render();});
 window.addEventListener('factory-data-offline',()=>{for(const info of catalog)if(info.kind==='device')info.monitoring='后台断连';render();});
 
 window.addEventListener('analysis-replay',e=>{const label=document.getElementById('metric-alerts')?.previousElementSibling;if(label)label.textContent=e.detail.data?'回放进入报警':'当前进入报警';});
+
+$('demo-source').addEventListener('change',()=>{const key=$('demo-source').value;window.FactoryTwin?.switchView(['a','b'].includes(key)?key:'overview');$('demo-start').disabled=activeDemoKey===key;});

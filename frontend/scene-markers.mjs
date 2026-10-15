@@ -48,7 +48,7 @@ export class SceneMarkers {
         this.places=places;this.width=width;this.height=height;
         for(const record of this.records.values()){
             const p=places.get(record.id);record.node.hidden=!p;
-            if(p)record.node.style.transform=`translate(${p.x}px,${p.y}px)`;
+            if(p){record.node.style.setProperty('--marker-x',p.x+'px');record.node.style.setProperty('--marker-y',p.y+'px');record.node.style.transform=`translate(${p.x}px,${p.y}px)`;}
             else if(this.active===record)this.clearPreview();
         }
         this.positionTooltip();

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 190" role="img" aria-label="工安智瞳，原版机械字标识">
+ <defs>
+  <linearGradient id="silver" x2="0" y2="1"><stop stop-color="#f8fcff"/><stop offset=".25" stop-color="#aebdc6"/><stop offset=".43" stop-color="#e8f0f4"/><stop offset=".47" stop-color="#758995"/><stop offset=".7" stop-color="#d9e5eb"/><stop offset="1" stop-color="#9cabb5"/></linearGradient>
+  <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#377783"/><stop offset="1" stop-color="#16434e"/></linearGradient>
+  <filter id="raised" x="-.1" y="-.15" width="1.3" height="1.4"><feDropShadow dx="1" dy="3" stdDeviation="0" flood-color="#70848d"/><feDropShadow dx="2" dy="6" stdDeviation="2" flood-color="#030a0e" flood-opacity=".9"/></filter>
+ </defs>
+ <g transform="translate(17 13)">
+  <path d="M68 4 127 39v70l-59 35L9 109V39Z" fill="none" stroke="url(#teal)" stroke-width="12"/>
+  <path d="m13 51 20-12v16l-12 7v37l12 7v16L8 108V55Z M123 51l-20-12v16l12 7v37l-12 7v16l25-14V55Z" fill="#efaa30"/>
+  <path d="M36 33h64v16H77v61h23v16H36v-16h23V49H36Z" fill="url(#teal)"/>
+  <circle cx="68" cy="78" r="21" fill="#eda82f"/><circle cx="68" cy="78" r="15.5" fill="#1d5662" stroke="#0b2731" stroke-width="2"/>
+  <path d="M68 54v8M68 95v7M44 78h8M84 78h8" stroke="#102c36" stroke-width="3"/><circle cx="68" cy="78" r="6" fill="#08242e"/><circle cx="72" cy="74" r="2" fill="#6fa1a9"/>
+  <path d="m44 145 24 13 24-13Z" fill="#285f6a"/>
+ </g>
+ <g transform="translate(190 0) skewX(-7)">
+  <text x="9" y="125" fill="url(#silver)" stroke="#c0cdd4" stroke-width=".7" font-size="103" font-weight="900" font-family="Microsoft YaHei, sans-serif" letter-spacing="6" filter="url(#raised)">工安智瞳</text>
+ </g>
+ <text x="195" y="169" fill="#acbec9" font-size="16" font-family="Arial, sans-serif" letter-spacing="5.2">CONSTRUCTION SAFETY AI</text>
+</svg>

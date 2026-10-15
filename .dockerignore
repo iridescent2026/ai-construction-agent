@@ -13,3 +13,8 @@ node_modules
 cloud-data
 *.log
 tests
+
+.local
+**/.local
+*.dpapi
+**/*.dpapi

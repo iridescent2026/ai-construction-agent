@@ -1,12 +1,14 @@
+import {OutdoorActors,referenceTransform} from './outdoor-scene.mjs?v=39';
 import {personnelSafetySnapshot} from './personnel-alarms.mjs?v=29';
 import {InspectionWalk} from './inspection-walk.mjs';
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/three/OrbitControls.js';
 import {GLTFLoader} from './vendor/three/GLTFLoader.js';
-import {SceneMarkers} from './scene-markers.mjs';
-import {placeLabels} from './scene-layout.mjs';
-import {layoutSectionLabels} from './factory-section-layout.mjs';
-import {buildFactorySite,updateFactorySite} from './factory-site-model.mjs';
+import {SceneMarkers} from './scene-markers.mjs?v=39';
+import {placeAnchoredMarkers} from './scene-layout.mjs?v=39';
+import {modelMarkerAnchor} from './model-marker-anchor.mjs?v=39';
+import {layoutSectionLabels} from './factory-section-layout.mjs?v=39';
+import {buildFactorySite,updateFactorySite} from './factory-site-model.mjs?v=40';
 import {buildFactory,VIEWS} from './factory-model.mjs';
 import {DEMO_PATHS} from './factory-safety.mjs';
 import {watchFactory,factoryRequest,measurementText,freshFactory,observationSource} from './factory-client.mjs';
@@ -22,7 +24,7 @@ const siteModels=new Map(),areaLabels=[];let areaLabelLayer;
 const assets=new Map(),cache=new Map();let scene,renderer,camera,controls,markers,root,current='overview',selected=null,preview=null,frame,disposed=false,ready=false;
 let snapshot={active:[],events:[],added:[]};
 const layers={device:true,person:true,zone:true},lights={};
-let gisRoute,routeKey='';
+let exteriorActors;let gisRoute,routeKey='';
 function drawGisRoute(points=[],origin){if(!cache.has('overview')||!origin)return;const key=JSON.stringify(points);if(key===routeKey)return;routeKey=key;if(gisRoute){gisRoute.removeFromParent();gisRoute.geometry.dispose();gisRoute.material.dispose();gisRoute=null;}if(points.length<2)return;const positions=points.map(([lng,lat])=>new THREE.Vector3((lng-origin[0])*111320*Math.cos(origin[1]*Math.PI/180),.9,(origin[1]-lat)*111320));gisRoute=new THREE.Line(new THREE.BufferGeometry().setFromPoints(positions),new THREE.LineDashedMaterial({color:0xe8b95b,dashSize:2,gapSize:1}));gisRoute.computeLineDistances();cache.get('overview').add(gisRoute);}
 function detail(info){preview=info;paintDetail();}
 function paintDetail(){
@@ -34,11 +36,11 @@ function paintDetail(){
     $('detail-description').textContent=(!connected&&stopSubscription?'后台断连，以下为最后观测。':'')+risk+position+(info.kind==='device'?measurementText(info,replayFrame?.updatedAt)+'。':'')+observed+info.text.replace('（模拟位置）','').replace('本地模拟位置，','');
 }
 function entities(model=root){return [...(model.userData.locations||[]),...(model.userData.devices||[]),...(model.userData.people||[]),...(model.userData.zones||[])];}
-function catalog(){return [...cache.values()].flatMap(model=>entities(model)).filter(info=>info.kind!=='model'&&info.view!=='overview');}
+function catalog(){return [...cache.values()].flatMap(model=>entities(model)).filter(info=>info.kind!=='model'&&info.view!=='overview').concat((serverState?.entities||[]).filter(info=>info.view==='overview'));}
 function markerTitle(info){return info.title.startsWith(info.id+' ·')?info.title:`${info.id} · ${info.title}`;}
 function markerColor(info){return info.riskState==='unknown'?'#98a1ac':info.riskState==='danger'?'#ff6868':info.kind==='zone'?'#f18e65':info.kind==='person'?'#66d4b3':'#e8ac42';}
-function worldAnchor(info){return info.anchor;}
-function visibleEntities(){return (['overview','section'].includes(current)?[]:entities()).filter(info=>layers[info.kind]!==false);}
+function worldAnchor(info){return info.view==='overview'?(exteriorActors?.markerAnchor(info.id)||[0,0,0]):modelMarkerAnchor(root,info);}
+function visibleEntities(){return (current==='section'?[]:current==='overview'?catalog().filter(e=>e.view==='overview'):entities()).filter(info=>layers[info.kind]!==false);}
 function focusEntity(info){walk?.exit();const point=new THREE.Vector3(...worldAnchor(info));controls.minDistance=8;controls.enableDamping=false;controls.target.copy(point);camera.position.copy(point).add(new THREE.Vector3(12,18,22));controls.update();controls.enableDamping=true;stage.dataset.focusedEntity=info.id;}
 
 function refreshMarkers(){
@@ -54,10 +56,10 @@ function evaluateSafety(){
 }
 function moveEntity(id,x,z,updateShadow=true){
     const info=catalog().find(i=>i.id===id);if(!info||info.kind!=='person'&&!info.mobile||!Number.isFinite(x)||!Number.isFinite(z))return false;
-    const object=cache.get(info.view).getObjectByName(id);object.position.x=x;object.position.z=z;info.anchor[0]=x;info.anchor[2]=z;if(updateShadow)renderer.shadowMap.needsUpdate=true;return true;
+    const object=info.view==='overview'?null:cache.get(info.view)?.getObjectByName(id);if(object){object.position.x=x;object.position.z=z;}info.anchor[0]=x;info.anchor[2]=z;if(updateShadow)renderer.shadowMap.needsUpdate=true;return true;
 }
 function stopDemo(){return commandDemo('stop');}
-function startDemo(key){if(!['a','b'].includes(key)||!DEMO_PATHS[key]||!ready)return false;switchView(DEMO_PATHS[key].view);return commandDemo('start',key);}
+function startDemo(key){if(!['a','b','overview','vehicle','outdoor'].includes(key)||!ready)return false;switchView(['a','b'].includes(key)?key:'overview');window.FactoryTwin?.setLayer('person',true);window.FactoryTwin?.setLayer('device',true);return commandDemo('start',key);}
 function resetDemo(){return commandDemo('reset');}
 function select(info){
     if(info.kind==='model'){switchView(info.view);return;}
@@ -92,7 +94,7 @@ function switchView(view){walk?.exit();if(highlightGroup){scene.remove(highlight
     delete stage.dataset.focusedEntity;
     const pure=['overview','section'].includes(view);stage.dataset.siteView=view==='overview'?'exterior':view==='section'?'section':'interior';
     document.querySelectorAll('.scene-legend').forEach(n=>n.hidden=pure);
-    const demoControls=document.querySelector('.simulation-controls');if(demoControls)demoControls.hidden=pure;const demoSource=$('demo-source');if(demoSource&&!pure)demoSource.value=view;
+    const demoControls=document.querySelector('.simulation-controls');if(demoControls)demoControls.hidden=!demoControls.classList.contains('ws-motion-controls');const demoSource=$('demo-source');if(demoSource&&!pure)demoSource.value=view;
     areaLabelLayer.replaceChildren();areaLabels.length=0;for(const area of root.userData.areaLabels||[]){const n=document.createElement('div');n.className='section-area-label '+area.view;const title=document.createElement('strong'),note=document.createElement('small');title.textContent=area.title;note.textContent=area.note;n.append(title,note);areaLabelLayer.append(n);areaLabels.push({node:n,anchor:area.anchor});}
     const footer=stage.querySelector('.scene-footer span');if(footer)footer.textContent=pure?'拖动旋转 · 滚轮缩放 · 选择工区查看内部':'拖动旋转 · 滚轮缩放 · 悬停图标查看名称';
     document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===view));
@@ -101,7 +103,7 @@ function switchView(view){walk?.exit();if(highlightGroup){scene.remove(highlight
     const infos=pure?[{id:'A',kind:'model',view:'a',title:'装配制造 · 西侧厂房'},{id:'B',kind:'model',view:'b',title:'动力设备 · 东侧厂房与控制侧翼'}]:entities();refreshMarkers();
     $('equipment-directory').replaceChildren();for(const info of infos){const b=document.createElement('button'),code=document.createElement('span'),name=document.createElement('strong');code.textContent=info.id;name.textContent=info.title;b.append(code,name);b.addEventListener('click',()=>{if(info.kind==='model')select(info);else window.FactoryTwin.locate(info.id);});$('equipment-directory').appendChild(b);}
     fitView();renderer.shadowMap.needsUpdate=true;
-    scene.background.set(current==='b'?'#172530':'#20343e');if(lights.ambient)lights.ambient.intensity=current==='b'?1.8:2.2;if(lights.sun)lights.sun.intensity=current==='b'?2.5:3.3;
+    scene.background=null;if(lights.ambient)lights.ambient.intensity=current==='b'?1.8:2.2;if(lights.sun)lights.sun.intensity=current==='b'?2.5:3.3;
     const banner=$('scene-alert');if(banner){const alerts=snapshot.active.filter(item=>!pure&&item.view===current);banner.hidden=!alerts.length;banner.textContent=`⚠ ${alerts.length} 条区域进入报警 · ${alerts.map(item=>`${item.entityId} → ${item.zoneId}`).join(' / ')}`;}
     window.dispatchEvent(new CustomEvent('factory-view-change',{detail:{view}}));
     window.dispatchEvent(new CustomEvent('factory-select',{detail:null}));
@@ -109,13 +111,13 @@ function switchView(view){walk?.exit();if(highlightGroup){scene.remove(highlight
 function layout(){
     const w=stage.clientWidth,h=stage.clientHeight,infos=visibleEntities();
     const items=infos.map(info=>{const p=new THREE.Vector3(...worldAnchor(info)).project(camera);return{id:info.id,x:(p.x+1)*w/2,y:(1-p.y)*h/2,width:22,height:22,priority:info.id===selected?.id?4:1,visible:p.z>-1&&p.z<1};});
-    markers.layout(placeLabels(items,w,h,43,54),w,h);
+    markers.layout(placeAnchoredMarkers(items,w,h),w,h);
     layoutSectionLabels(areaLabels,camera,w,h);
 }
-function render(){if(disposed)return;frame=requestAnimationFrame(render);if(walk?.active)walk.update();else controls.update();renderer.render(scene,camera);layout();}
+function render(){if(disposed)return;frame=requestAnimationFrame(render);if(walk?.active)walk.update();else controls.update();renderer.render(scene,camera);stage.style.setProperty('--view-bearing',-controls.getAzimuthalAngle()+'rad');layout();}
 async function start(){
-    scene=new THREE.Scene();scene.background=new THREE.Color('#1d3039');scene.fog=new THREE.Fog('#1d3039',500,950);
-    camera=new THREE.PerspectiveCamera(40,1,.1,1200);renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
+    scene=new THREE.Scene();scene.background=null;scene.fog=new THREE.Fog('#1d3039',500,950);
+    camera=new THREE.PerspectiveCamera(40,1,.1,1200);renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
     renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;stage.prepend(renderer.domElement);
     controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI*.47;controls.enablePan=true;
     lights.ambient=new THREE.HemisphereLight(0xddeef0,0x475451,2.2);scene.add(lights.ambient);
@@ -136,11 +138,11 @@ async function start(){
             if(!response.ok)throw new Error('厂区轮廓加载失败');return response.json();
         }
     }));
-    siteModels.set('overview',buildFactorySite(site,siteLayout,assets));siteModels.set('section',buildFactorySite(site,siteLayout,assets,{cutaway:true}));
+    siteModels.set('overview',buildFactorySite(site,siteLayout,assets));siteModels.set('section',buildFactorySite(site,siteLayout,assets,{cutaway:true}));exteriorActors=new OutdoorActors(siteModels.get('overview'),select,referenceTransform(site));
     for(const info of catalog())if(info.kind==='person'||info.mobile){info.riskState='unknown';info.currentZones=[];}
     ready=true;switchView(embedded&&['a','b'].includes(referenceArea)?referenceArea:'overview');$('loading').hidden=true;render();
     window.FactoryTwin={
-        catalog,safetySnapshot:()=>snapshot,enterInspection(id){const info=catalog().find(e=>e.id===id);if(info&&current!==info.view)switchView(info.view);if(info)select(info);walk.enter(info);},exitInspection(){walk.exit();},startDemo,stopDemo,resetDemo,switchView,
+        catalog,safetySnapshot:()=>snapshot,zoom(direction){const delta=camera.position.clone().sub(controls.target),distance=THREE.MathUtils.clamp(delta.length()*(direction>0?1.22:.82),controls.minDistance,controls.maxDistance);camera.position.copy(controls.target).add(delta.setLength(distance));controls.update();},enterInspection(id){const info=catalog().find(e=>e.id===id);if(info&&current!==info.view)switchView(info.view);if(info)select(info);walk.enter(info);},exitInspection(){walk.exit();},startDemo,stopDemo,resetDemo,switchView,
         async updatePosition(id,{x,z}){if(replayFrame)throw new Error('请先返回实时再上报位置');const data=await factoryRequest('/observations',{observations:[{id,x,z}]});applyState(data);return true;},
         setLayer(kind,enabled){if(!(kind in layers))return;layers[kind]=enabled;for(const model of cache.values())for(const info of entities(model))if(info.kind===kind)model.getObjectByName(info.id).visible=enabled;updateFactorySite(siteModels.get('section'),serverState,layers);refreshMarkers();},
         locate(id){const context=window.FactoryLocation?.capture();const info=catalog().find(item=>item.id===id);if(!info)return false;if(layers[info.kind]===false){this.setLayer(info.kind,true);window.dispatchEvent(new CustomEvent('factory-layer-change',{detail:{kind:info.kind,enabled:true}}));}select(info);focusEntity(info);refreshMarkers();if(window.FactoryLocation)window.FactoryLocation.open(info,context);else document.querySelector('.scene-card').scrollIntoView({behavior:'smooth',block:'start'});return true;}
@@ -171,7 +173,7 @@ $('factory-export').addEventListener('click',()=>{
     renderer.setPixelRatio(1);renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();fitView();renderer.render(scene,camera);
     const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');ctx.drawImage(renderer.domElement,0,0);
     const infos=visibleEntities();
-    const places=placeLabels(infos.map(info=>{const p=new THREE.Vector3(...worldAnchor(info)).project(camera);return{id:info.id,x:(p.x+1)*width/2,y:(1-p.y)*height/2,width:22,height:22,priority:1,visible:p.z>-1&&p.z<1};}),width,height,80,45);
+    const places=placeAnchoredMarkers(infos.map(info=>{const p=new THREE.Vector3(...worldAnchor(info)).project(camera);return{id:info.id,x:(p.x+1)*width/2,y:(1-p.y)*height/2,width:22,height:22,priority:1,visible:p.z>-1&&p.z<1};}),width,height,80,45);
     for(const area of root.userData.areaLabels||[]){const p=new THREE.Vector3(...area.anchor).project(camera);ctx.fillStyle='#142a32';ctx.fillRect((p.x+1)*width/2-72,(1-p.y)*height/2-30,160,38);ctx.fillStyle='#f5ead2';ctx.font="600 18px 'Microsoft YaHei',sans-serif";ctx.fillText(area.title,(p.x+1)*width/2-62,(1-p.y)*height/2-5);}
     renderer.setPixelRatio(pixelRatio);renderer.setSize(size.x,size.y,false);camera.aspect=oldAspect;camera.updateProjectionMatrix();controls.enableDamping=false;camera.position.copy(oldPosition);controls.target.copy(oldTarget);controls.update();controls.enableDamping=true;
     ctx.fillStyle='#dbe6e2';ctx.font="500 28px 'Microsoft YaHei',sans-serif";ctx.fillText(VIEW_CONFIG[current].title,30,43);
@@ -188,10 +190,10 @@ function applyState(data, historical=false){if(!historical){if(!acceptsRevision(
     if(!ready||!data.entities)return;serverState=data;connected=true;
     const byId=new Map(catalog().map(info=>[info.id,info]));
     for(const record of data.entities){const info=byId.get(record.id);if(!info)continue;if(info.kind==='person'||info.mobile)moveEntity(info.id,record.anchor[0],record.anchor[2],false);for(const key of ['riskState','currentZones','positionSource','positionTimestamp','measurements','measurementSource','measurementTimestamp','measurementNote','measurementProvenance','positionProvenance'])info[key]=record[key];}
-    snapshot=personnelSafetySnapshot(data);
+    exteriorActors?.update(data,false,layers);snapshot=personnelSafetySnapshot(data);
     stage.dataset.revision=data.revision;renderer.shadowMap.needsUpdate=true;evaluateSafety();
     window.dispatchEvent(new CustomEvent('factory-data-update',{detail:data}));
-    window.dispatchEvent(new CustomEvent('factory-demo-change',{detail:{running:!!data.demo&&['a','b'].includes(data.demo.key),key:data.demo?.key,id:data.demo?.id}}));
+    window.dispatchEvent(new CustomEvent('factory-demo-change',{detail:{running:!!data.demo,key:data.demo?.key,id:data.demo?.id,ids:data.demo?.ids,view:['a','b'].includes(data.demo?.key)?data.demo.key:'overview'}}));
     updateConnection();
 }
 function updateConnection(error){
@@ -203,7 +205,7 @@ function updateConnection(error){
     if(error&&$('home-status'))$('home-status').textContent=error.message;
 }
 function disconnect(error){connected=false;if(replayFrame){updateConnection(error);return;}for(const info of catalog())if(info.kind==='person'||info.mobile)info.riskState='unknown';snapshot={...snapshot,active:snapshot.active.map(a=>({...a,state:'unknown'}))};evaluateSafety();updateConnection(error);window.dispatchEvent(new CustomEvent('factory-data-offline'));}
-async function commandDemo(action,key){if(replayFrame){$('home-status').textContent='请先返回实时再操作模拟轨迹';return false;}try{applyState(await factoryRequest('/demo',{action,key:key||'overview'}));return true;}catch(error){if($('home-status'))$('home-status').textContent=error.message;return false;}}
+async function commandDemo(action,key){if(replayFrame){$('home-status').textContent='请先返回实时再操作模拟轨迹';return false;}try{applyState(await factoryRequest('/demo',{action,key:key||$('demo-source')?.value||(['a','b'].includes(current)?current:'overview')}));return true;}catch(error){if($('home-status'))$('home-status').textContent=error.message;return false;}}
 window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.type!=='factory-gis'||!ready)return;const msg=e.data;if(msg.action==='route')drawGisRoute(msg.points,msg.origin);if(msg.action==='state'){if(msg.data)applyState(msg.data);else disconnect(new Error('GIS 工厂后台断连'));}if(msg.action==='locate')window.FactoryTwin.locate(msg.id);if(msg.action==='clear'){$('factory-close').click();}if(msg.action==='reset'){switchView('overview');fitView();}if(msg.action==='layers')for(const [kind,key]of [['person','people'],['device','devices'],['zone','zones']])window.FactoryTwin.setLayer(kind,msg.visibility[key]!==false);});
 window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.type!=='factory-gis'||!ready)return;if(e.data.action==='reference-reset'&&embedded&&['a','b'].includes(referenceArea)){switchView(referenceArea);fitView();}});
 start().catch(error=>{$('loading').textContent='三维场景加载失败，请刷新重试。';$('scene-error').textContent=error.message;console.error(error);});

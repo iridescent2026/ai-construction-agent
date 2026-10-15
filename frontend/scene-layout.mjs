@@ -36,3 +36,13 @@ export function placeLabels(items,width,height,top=66,bottom=45) {
     }
     return positions;
 }
+
+// A marker is a position, not a text label. Never move it to avoid collisions.
+export function placeAnchoredMarkers(items,width,height){
+    const result=new Map();
+    for(const item of items){
+        if(!item.visible||!Number.isFinite(item.x)||!Number.isFinite(item.y)||item.x<0||item.y<0||item.x>width||item.y>height)continue;
+        result.set(item.id,{x:item.x-item.width/2,y:item.y-item.height/2});
+    }
+    return result;
+}

@@ -1,0 +1,13 @@
+/* Keep the original DOM measurable for scene setup without painting legacy UI. */
+html.workspace-pending{background:#070f17}
+html.workspace-pending body{visibility:hidden}
+html.workspace-pending::after{content:'工作空间加载中…';position:fixed;inset:0;display:grid;place-items:center;background:#070f17;color:#d5bc82;font:14px system-ui;letter-spacing:3px;z-index:2147483646;pointer-events:none}
+html.workspace-failed::after{display:none}
+.workspace-boot-error{visibility:visible;position:fixed;inset:0;display:grid;place-content:center;gap:20px;text-align:center;color:#ead6a3;background:#070f17;z-index:2147483647;font:16px system-ui}
+.workspace-boot-error button{padding:12px 24px;color:#ead6a3;background:#172633;border:1px solid #a9874a;cursor:pointer}
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:workspace-out .12s ease both}
+::view-transition-new(root){animation:workspace-in .12s ease both}
+@keyframes workspace-out{to{opacity:0}}
+@keyframes workspace-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){::view-transition-old(root),::view-transition-new(root){animation:none}}

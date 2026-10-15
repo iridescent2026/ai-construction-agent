@@ -5,6 +5,34 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from gis.factory import FactoryStore, Observation, Batch, DemoCommand, REFERENCE
 
+def test_outdoor_reset_does_not_stop_or_reset_indoor_worker(tmp_path):
+    store=FactoryStore(tmp_path/'separate-routes.db')
+    store.command(DemoCommand(action='start',key='a'))
+    store.data['demo']['started']=time.monotonic()-9
+    store.tick()
+    result=store.command(DemoCommand(action='reset',key='vehicle'))
+    assert result['demo']['key']=='a'
+    worker=next(e for e in result['entities'] if e['id']=='P005')
+    assert worker['anchor'][::2]!=worker['origin']
+    vehicle=next(e for e in result['entities'] if e['id']=='E-04')
+    assert vehicle['anchor'][::2]==vehicle['origin']
+
+def test_outdoor_person_stop_does_not_stop_vehicle(tmp_path):
+    store=FactoryStore(tmp_path/'vehicle-route.db')
+    store.command(DemoCommand(action='start',key='vehicle'))
+    assert store.command(DemoCommand(action='stop',key='overview'))['demo']['key']=='vehicle'
+    assert store.command(DemoCommand(action='stop',key='vehicle'))['demo'] is None
+
+def test_indoor_reset_does_not_reset_outdoor_person(tmp_path):
+    store=FactoryStore(tmp_path/'indoor-reset.db')
+    store.command(DemoCommand(action='start',key='overview'))
+    store.data['demo']['started']=time.monotonic()-9
+    store.tick()
+    result=store.command(DemoCommand(action='reset',key='b'))
+    assert result['demo']['key']=='overview'
+    worker=next(e for e in result['entities'] if e['id']=='P023')
+    assert worker['anchor'][::2]!=worker['origin']
+
 def test_three_workers_move_and_telemetry_stops_group_without_overwrite(tmp_path):
     store=FactoryStore(tmp_path/'group.db')
     before={e['id']:e['anchor'][:] for e in store.snapshot()['entities']}

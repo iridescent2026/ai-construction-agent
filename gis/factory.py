@@ -246,10 +246,16 @@ class FactoryStore:
                 path=paths[0]
                 self.data['demo']={'key':command.key,'id':path['id'],'ids':[p['id'] for p in paths],'started':time.monotonic()}
             elif command.action in ['stop','reset']:
-                self.data['demo']=None
+                paths=demo_paths(command.key)
+                if not paths:
+                    raise HTTPException(422,'未知移动路线')
+                affected={path['id'] for path in paths}
+                active=self.data.get('demo')
+                if active and affected.intersection(path['id'] for path in demo_paths(active['key'])):
+                    self.data['demo']=None
                 if command.action=='reset':
                     for e in self.data['entities']:
-                        if e.get('origin') and e.get('positionSource')!='telemetry':
+                        if e['id'] in affected and e.get('origin') and e.get('positionSource')!='telemetry':
                             e['anchor'][0],e['anchor'][2]=e['origin']
             else:
                 raise HTTPException(422,'未知演示操作')

@@ -1,10 +1,11 @@
+import {detailIndustrialExterior} from './gis-night-detail.mjs?v=38';
 import {buildFactory} from './factory-model.mjs';
 import {buildReferenceExterior} from './gis-reference-model.mjs';
 import {placeEntity} from './gis-reference-geometry.mjs';
 
 // The homepage and remote-sensing workbench use exactly the same exterior and cutaway.
 export function buildFactorySite(site,layout,assets=new Map(),{cutaway=false}={}){
-    const root=buildReferenceExterior(site,layout,{cutaway});root.name=cutaway?'factory-site-cutaway':'factory-site-exterior';
+    const root=buildReferenceExterior(site,layout,{cutaway});root.name=cutaway?'factory-site-cutaway':'factory-site-exterior';if(!cutaway)detailIndustrialExterior(root);
     root.userData.workAreas=new Map();root.userData.areaLabels=[];
     if(cutaway)for(const view of ['a','b']){
         const frame=site.frames[view],model=buildFactory(view,assets);

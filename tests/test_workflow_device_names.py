@@ -42,7 +42,7 @@ def test_explicit_device_overrides_selected_device_with_or_without_model(monkeyp
     monkeypatch.setattr(language.httpx, 'post', lambda *_args, **_kwargs: Reply())
     result = interpret('B01什么状态', 'B-05')
     assert result['entityId'] == 'B-01'
-    assert result['engine'] == 'language-model-classification'
+    assert result['engine'] == 'lexicon-context'
 
 
 def test_mixed_aliases_of_different_devices_require_clarification(monkeypatch):

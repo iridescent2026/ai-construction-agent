@@ -24,6 +24,7 @@ class Chat(BaseModel):
     entityId: str = 'B-05'
     useTestRule: bool = False
     history: list[ChatMessage] = Field(default_factory=list,max_length=6)
+    answerMode: Literal['template','grounded'] = 'template'
 
     @model_validator(mode='after')
     def history_budget(self):
@@ -181,16 +182,16 @@ class Workflow:
     def chat(self,command,request):
         query=command.query.strip()
         if not query:raise HTTPException(422,'问题不能为空')
-        from gis.workflow_language import interpret
+        from gis.workflow_language import interpret, model_enabled, model_config, display_observed_time
         import os
-        if os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1':self.accounts.require(request)
+        if model_enabled():self.accounts.require(request)
         parsed=interpret(query,command.entityId,str(self.accounts.path),devices=self.factory.snapshot()['entities']);id=parsed['entityId'];intent=parsed['intent']
-        if parsed.get('outsideScope') and os.getenv('WORKFLOW_MODEL_ENABLED','0')=='1' and os.getenv('WORKFLOW_MODEL_API_KEY'):
+        if parsed.get('outsideScope') and model_enabled():
             self.accounts.require(request)
             from gis.workflow_language import answer_general
             result=answer_general(query,[m.model_dump() for m in command.history],str(self.accounts.path))
             traces=([{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else [])+[result['trace']]
-            return {'success':result['success'],'answer':result['answer'],'intent':'general','engine':'deepseek-general-chat','languageEngine':parsed['engine'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'draft':None}
+            return {'success':result['success'],'answer':result['answer'],'intent':'general','engine':model_config()['provider']+'-general-chat','languageEngine':parsed['engine'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'draft':None}
         if parsed['clarification']:
             traces=[{**parsed['trace'],'input':{'query':query}}] if parsed['trace'] else []
             return {'success':False,'needsInput':True,'answer':parsed['clarification'],'tool_calls':[t['tool'] for t in traces],'tool_results':traces,'engine':'rule-tool-orchestrator','languageEngine':parsed['engine']}
@@ -205,7 +206,9 @@ class Workflow:
             answer=f'{id} · {obs["title"]}\n当前状态：{obs["statusLabel"]}。\n监测读数：{readings}。\n数据来源：{obs["source"]}；采集时间：{captured}。\n判断依据：{obs["rule"]["basis"]}。'
             if obs['missingNote']:answer+='\n'+obs['missingNote']+'。'
         elif intent=='impact':
-            answer='候选关联：'+('、'.join(n['id']+' '+n['title'] for n in case['impact']['nodes'] if n['id']!=id) or '暂无连接台账')+'。'+case['impact']['basis']+('包含未确认连接，不能认定故障传播。' if case['impact']['hasUnverified'] else '填写依据不等于工程因果验证。')
+            related='、'.join(n['id']+' '+n['title'] for n in case['impact']['nodes'] if n['id']!=id) or '暂无连接台账'
+            reachable='、'.join(case['impact'].get('directionalCandidates',[])) or '暂无按连接方向可达的候选对象'
+            answer=f'{id} · {obs["title"]}：故障影响核查\n这是故障假设分析，不表示后台已确认设备损坏。\n候选关联：{related}。\n按台账方向可达的候选：{reachable}；其他关联对象可能是上游供电或空间邻近对象，不能直接视为被该设备故障影响。\n'+case['impact']['basis']+('包含未确认连接，不能认定故障传播。' if case['impact']['hasUnverified'] else '填写依据不等于工程因果验证。')
         elif intent=='people':
             answer=f'关联区域有效人员：'+('、'.join(p['id']+' '+p['title'] for p in case['people']['valid']) or '未发现有效记录')+f'；同工区位置未知 {len(case["people"]["unknownInWorkArea"])} 人。相关作业 {len(case["workPlans"]["items"])} 项、范围时段重叠 {len(case["workPlans"]["conflicts"])} 组；未匹配计划不代表没有现场作业。'
             if '冲突' in query:answer+='拟检修尚未指定时段和范围，不能判断这次检修是否冲突；请在“候选检修计划”中填写后检查。'
@@ -232,8 +235,19 @@ class Workflow:
             elif other=='review':extra.append('复核：处理账号提交凭证，由另一复核账号关闭或退回；不通过聊天直接关闭。')
             elif other=='recommendations':extra.append('建议：'+'；'.join(r['action'] for r in case['recommendations']))
         if extra:answer+='\n\n'+'\n'.join(extra)
+        answer_engine='rule-tool-orchestrator'
+        if command.answerMode=='grounded' and draft is None:
+            from gis.workflow_language import answer_grounded
+            generated=answer_grounded(query,case,parsed['intents'],[m.model_dump() for m in command.history],str(self.accounts.path))
+            case['toolResults'].append(generated['trace'])
+            if generated['success']:
+                answer=generated['answer']+f'\n\n核查依据：{id} · 后台观测 v{case["factoryRevision"]} · 来源：{obs["source"]} · 采集：{display_observed_time(obs["observedAt"])}。'
+                answer_engine=model_config()['provider']+'-grounded-chat'
+            else:
+                answer='AI 服务暂未完成回答，以下为本地核查结果：\n\n'+answer+'\n\n模型状态：'+generated['answer']
+                answer_engine='rule-tool-fallback'
         missing=['拟检修开始/结束时间','实际作业范围与高度'] if '冲突' in query else []
-        return {'success':True,'intent':intent,'intents':parsed['intents'],'languageEngine':parsed['engine'],'missingInputs':missing,'entityId':id,'answer':answer,'case':case,'draft':draft,'engine':'rule-tool-orchestrator','tool_calls':[t['tool'] for t in case['toolResults']],'tool_results':case['toolResults']}
+        return {'success':True,'intent':intent,'intents':parsed['intents'],'languageEngine':parsed['engine'],'missingInputs':missing,'entityId':id,'answer':answer,'case':case,'draft':draft,'engine':answer_engine,'tool_calls':[t['tool'] for t in case['toolResults']],'tool_results':case['toolResults']}
 
 def install_workflow(app,factory,analysis,accounts):
     workflow=Workflow(factory,analysis,accounts);router=APIRouter(prefix='/factory/workflow',tags=['device-investigation'])

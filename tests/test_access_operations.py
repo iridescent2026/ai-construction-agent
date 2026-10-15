@@ -159,13 +159,20 @@ def test_restore_does_not_impersonate_review_evidence(system):
     backup=client.get('/factory/operations/backup',headers=admin).json();backup.pop('checksum')
     backup['documents']['engineeringReviews']=[{'subject':'rules','conclusion':'confirmed','reference':'导入材料，未核实真实性','qualification':'声明资质','note':'声明通过，须重新审阅','scope':'recorded_review','reviewer':'someone','at':datetime.now(timezone.utc).isoformat()}]
     backup['checksum']=checksum(backup)
-    restored=client.post('/factory/operations/restore',headers=admin,json={'backup':backup,'expectedRevision':client.get('/factory/state',headers=admin).json()['revision'],'confirmation':'恢复本项目备份'})
+    # Retry only a rejected optimistic-lock attempt after a sampler update.
+    for _ in range(5):
+        restored=client.post('/factory/operations/restore',headers=admin,json={'backup':backup,'expectedRevision':client.get('/factory/state',headers=admin).json()['revision'],'confirmation':'恢复本项目备份'})
+        if restored.status_code!=409:break
     assert restored.status_code==200,restored.text
     tasks=client.get('/factory/operations/tasks',headers=admin).json()
     assert tasks['evidencePending']==5 and tasks['reviews'][0]['scope']=='imported_review'
 
 @pytest.mark.parametrize('content,status',[('{"intents":["status","draft"]}','success'),('{"intents":["bypass_auth"]}','fallback'),('not-json','fallback')])
 def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,tmp_path,content,status):
+    monkeypatch.setenv('WORKFLOW_TEMPLATE_FIRST','0')
+    monkeypatch.setenv('WORKFLOW_MODEL_PROVIDER','deepseek')
+    monkeypatch.setenv('WORKFLOW_MODEL_NAME','deepseek-flash')
+    monkeypatch.setenv('WORKFLOW_MODEL_BASE_URL','https://api.deepseek.com')
     import gis.workflow_language as language
     monkeypatch.delenv('DATABASE_URL',raising=False)
     monkeypatch.setenv('WORKFLOW_QUOTA_DB_PATH',str(tmp_path/'quota.db'))
@@ -177,7 +184,7 @@ def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,tmp
         assert url.startswith('https://')
         assert kwargs['json']['model']=='deepseek-flash'
         assert kwargs['json']['thinking']=={'type':'disabled'}
-        assert kwargs['json']['messages'][1]['content']=='不要创建工单，只查询设备状态'
+        assert kwargs['json']['messages'][1]['content']=='不要创建工单,只查询设备状态'
         assert 'observations' not in kwargs['json']
         return Response()
     monkeypatch.setattr(language.httpx,'post',request)
@@ -185,6 +192,10 @@ def test_model_classifies_only_and_negated_write_remains_blocked(monkeypatch,tmp
     assert result['trace']['status']==status and 'draft' not in result['intents']
 
 def test_model_daily_budget_falls_back_without_another_external_call(monkeypatch,tmp_path):
+    monkeypatch.setenv('WORKFLOW_TEMPLATE_FIRST','0')
+    monkeypatch.setenv('WORKFLOW_MODEL_PROVIDER','deepseek')
+    monkeypatch.setenv('WORKFLOW_MODEL_NAME','deepseek-flash')
+    monkeypatch.setenv('WORKFLOW_MODEL_BASE_URL','https://api.deepseek.com')
     import gis.workflow_language as language
     monkeypatch.delenv('DATABASE_URL',raising=False)
     monkeypatch.setenv('WORKFLOW_QUOTA_DB_PATH',str(tmp_path/'quota.db'))

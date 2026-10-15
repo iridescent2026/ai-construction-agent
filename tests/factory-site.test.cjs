@@ -1,9 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url');
+// Canvas text is cosmetic; provide the minimal browser surface for geometry tests.
+global.document={createElement:()=>({width:0,height:0,getContext:()=>({fillText(){}})})};
 const root=path.resolve(__dirname,'..'),frontend=path.join(root,'frontend'),modules=new Map();
 function moduleUrl(file){
  if(modules.has(file))return modules.get(file);
  let source=fs.readFileSync(file,'utf8').replace(/from 'three'/g,`from '${pathToFileURL(path.join(frontend,'vendor/three/three.module.js')).href}'`);
- source=source.replace(/from '(\.\/[^']+)'/g,(_,relative)=>`from '${moduleUrl(path.resolve(path.dirname(file),relative))}'`);
+ source=source.replace(/from '(\.\/[^']+)'/g,(_,relative)=>`from '${moduleUrl(path.resolve(path.dirname(file),relative.split(/[?#]/)[0]))}'`);
  const url='data:text/javascript;base64,'+Buffer.from(source).toString('base64');modules.set(file,url);return url;
 }
 const site=JSON.parse(fs.readFileSync(path.join(frontend,'assets/factory/reference-site.json'))),plan=JSON.parse(fs.readFileSync(path.join(frontend,'assets/factory/factory-plan.geojson')));

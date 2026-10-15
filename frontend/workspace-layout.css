@@ -1,0 +1,43 @@
+/* Live view lanes: controls never share pixels with map captions. */
+.blackgold-workspace .workspace-shell{background:linear-gradient(#06101a18,#06101a25),url('assets/workspace-industrial-night-v1.png') center/cover no-repeat}
+body.blackgold-workspace{background:#07111b url('assets/workspace-industrial-night-v1.png') center/cover fixed!important}
+.blackgold-workspace .ws-header header.app-header{background:linear-gradient(90deg,#06101bad,#101a23bb)!important}
+.blackgold-workspace .ws-nav,.blackgold-workspace .ws-metal{background-color:#08121bce!important}
+.blackgold-workspace .ws-viewport{background:transparent!important}
+.blackgold-workspace .scene-card,.blackgold-workspace .ws-gis-scene{background:#08131b40!important;border:1px solid #aa884b!important;box-shadow:none!important;overflow:hidden}
+.blackgold-workspace #factory-stage,.blackgold-workspace #reference-scene{background:transparent!important}
+.blackgold-workspace .ws-viewport .steel-bolt,.blackgold-workspace .ws-gis-scene:before,.blackgold-workspace .ws-gis-scene:after{display:none!important}
+.blackgold-workspace .ws-view-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;flex:none;padding:8px;background:linear-gradient(110deg,#07131beF,#15232bdd);border-bottom:1px solid #92713e;position:relative;z-index:20}
+.blackgold-workspace .ws-view-toolbar .view-tabs,.blackgold-workspace .ws-view-toolbar .view-buttons,.blackgold-workspace .ws-view-toolbar .scene-heading,.blackgold-workspace .ws-view-toolbar .ws-map-tools{position:static!important;inset:auto!important;margin:0!important;display:flex!important;align-items:center;flex-wrap:wrap;gap:5px;width:auto!important;padding:0!important;min-height:0!important;background:none!important;border:0!important;box-shadow:none!important}
+.blackgold-workspace .ws-view-toolbar .view-buttons button{grid-column:auto!important}
+.blackgold-workspace .ws-view-toolbar button{min-height:35px!important;white-space:nowrap;padding:7px 12px!important}
+.blackgold-workspace .ws-view-toolbar .scene-heading>div:first-child,.blackgold-workspace .ws-gis-scene>.scene-head{display:none!important}
+.blackgold-workspace .ws-view-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;min-height:52px;flex:none;background:#08121be8;border-top:1px solid #8d713f;position:relative;z-index:20}
+.ws-view-information{flex:1;min-width:0;font-size:11px;line-height:1.6;color:#b7c5c9}
+.blackgold-workspace .ws-view-footer .map-note,.blackgold-workspace .ws-view-footer .scene-footer{position:static!important;inset:auto!important;max-width:none!important;width:auto!important;background:none!important;padding:0!important;margin:0!important;white-space:normal!important;overflow-wrap:anywhere;border:0!important;box-shadow:none!important}
+.ws-view-action-buttons{display:flex;gap:8px;flex:none}
+.blackgold-workspace .ws-view-action-buttons .ws-fullscreen,.blackgold-workspace .ws-view-action-buttons .ws-expand-view{position:static!important;inset:auto!important;display:flex;align-items:center;gap:7px;min-height:36px;padding:7px 11px!important;font-size:12px!important;transform:none!important}
+.blackgold-workspace .ws-right{position:relative}
+.ws-layer-panel{position:absolute;inset:0;z-index:45;background:linear-gradient(130deg,#17232bf5,#08131bf9);border:1px solid #c09b59;border-radius:8px;padding:16px;overflow:auto;box-shadow:0 8px 30px #0008}
+.ws-layer-heading{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #827044;padding-bottom:12px;gap:10px}
+.ws-layer-heading h2{font-size:19px;margin:0;color:#f1d691}.ws-layer-heading button{width:34px;height:34px;padding:0;font-size:24px}
+.ws-layer-hint{font-size:12px;color:#aabdc4;line-height:1.7}.ws-layer-panel .layers{display:block!important;padding:12px 0;border-bottom:1px solid #556067}.ws-layer-panel .layers label{display:flex;gap:9px;margin:17px 0;font-size:14px}.ws-layer-panel>label{display:block;margin:25px 0 12px}.ws-layer-panel>input[type=range]{width:100%}.ws-layer-reset{margin-top:24px;width:100%}
+.blackgold-workspace header.app-header .brand-lockup>.ws-brand-image{width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:contain!important}
+.blackgold-workspace header.app-header .brand-lockup{flex:0 0 295px!important;width:295px!important;height:74px!important;padding:0!important;border:0!important}
+.blackgold-workspace .ws-home-link,.blackgold-workspace .ws-refresh{border:1px solid #caac6e!important;border-radius:0!important;clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px);background:linear-gradient(145deg,#26333dcc,#07111ceF)!important;box-shadow:inset 0 0 0 3px #0b151d,inset 0 0 12px #c79c4d22!important;color:#eee4cf!important;min-height:42px;padding:10px 17px!important;font-size:13px!important;font-weight:600}
+.blackgold-workspace .ws-sync{display:block;max-width:none;width:135px;flex:none;white-space:normal;line-height:1.8;padding:7px 10px;border:1px solid #3e505b;border-radius:5px;background:#091622b8;color:#7ee1c3;font-size:11px}
+.blackgold-workspace .account-toolbar{margin-right:70px!important}.blackgold-workspace .ws-account-menu>summary{padding:3px 10px 3px 0;gap:10px;border-bottom:1px solid #b99957;min-height:58px}.blackgold-workspace .account-avatar{width:52px!important;height:52px!important;flex:none;border:2px solid #ddba6b!important;box-shadow:0 0 0 4px #071018,inset 0 0 12px #000;background:radial-gradient(#263642,#060c12)!important;overflow:hidden}.account-avatar svg{width:46px;height:46px}.blackgold-workspace .ws-header-gear{opacity:1!important;width:120px!important}.blackgold-workspace .ws-header-gear>svg{filter:drop-shadow(0 0 5px #dca94b88)}
+@media(max-width:600px){.blackgold-workspace header.app-header .brand-lockup{flex-basis:205px!important;width:205px!important;height:56px!important}.blackgold-workspace .ws-sync{display:none}.blackgold-workspace .account-toolbar{margin-right:0!important}.ws-view-footer{flex-wrap:wrap}.ws-view-action-buttons{margin-left:auto}}
+/* Match the specificity of the original opaque scene rule. */
+.blackgold-workspace .ws-viewport .scene-card,.blackgold-workspace .ws-viewport .ws-gis-scene{background:#08131b40!important}
+.blackgold-workspace .ws-viewport #factory-stage,.blackgold-workspace .ws-viewport #reference-scene{background:transparent!important}
+/* User requested removal of the photographic workspace background. */
+body.blackgold-workspace{background:#081018!important}
+.blackgold-workspace .workspace-shell{background:#081018!important}
+.blackgold-workspace .ws-header header.app-header{background:linear-gradient(90deg,#08121d,#101a23)!important}
+.blackgold-workspace .ws-viewport .scene-card,.blackgold-workspace .ws-viewport .ws-gis-scene{background:#0b1722!important}
+.blackgold-workspace .ws-viewport #factory-stage,.blackgold-workspace .ws-viewport #reference-scene{background:#0b1722!important}
+/* Position markers must follow the current camera without CSS interpolation. */
+.blackgold-workspace .model-label{transition:filter .12s!important}
+.blackgold-workspace .model-label:active,.blackgold-workspace .model-label.ws-pressed{transform:translate(var(--marker-x),var(--marker-y))!important}
+.blackgold-workspace .outdoor-label,.blackgold-workspace .section-area-label{transition:filter .12s!important}

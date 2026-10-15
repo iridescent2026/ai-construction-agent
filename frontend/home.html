@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>工安智瞳 · 工业安全协同工作台</title>
+  <link rel="preload" as="image" href="assets/home-blackgold-reference.png">
+  <link rel="stylesheet" href="home-blackgold.css?v=46">
+  <script src="config.js"></script>
+<link rel="stylesheet" href="workspace-refinement.css?v=34"><link rel="stylesheet" href="brand-system.css?v=34"></head>
+<body>
+  <main class="home-stage" aria-label="工安智瞳首页">
+    <img class="home-art" src="assets/home-blackgold-reference.png" alt="工安智瞳黑金工业工作台，A/B工厂夜景，左右两侧分别为数字孪生与GIS入口。" width="1672" height="941">
+    <header class="home-heading"><h1>工业安全协同工作台</h1><p>看见风险 · 协同处置 · 全程可追溯</p></header>
+    <a class="portal portal-twin" href="index.html" aria-label="进入工厂安全数字孪生"><span class="portal-copy"><strong>工厂安全数字孪生</strong><span>三维巡视 · 设备核查 · 协同处置</span><b>进入数字孪生 →</b></span></a>
+    <a class="portal portal-gis" href="workbench.html" aria-label="进入 GIS 工作台"><span class="portal-copy"><strong>GIS 工作台</strong><span>空间定位 · 区域告警 · 观测联动</span><b>进入 GIS →</b></span></a>
+    <span class="gis-signal" aria-hidden="true"></span>
+    <button class="home-account" id="home-account" aria-label="打开我的账号" aria-expanded="false" aria-controls="home-account-menu"><span id="home-account-label" class="sr-only">我的账号</span></button>
+    <div id="home-account-menu" class="account-menu" hidden>
+      <strong id="home-user-name">验证登录…</strong><p id="home-user-role"></p>
+      <button id="home-profile-open" type="button">个人资料与账号中心</button>
+      <button id="home-logout" type="button">退出登录</button>
+    </div>
+    <p id="home-status" role="status" aria-live="polite"></p>
+  </main>
+  <script type="module" src="home.mjs?v=46"></script>
+<script type="module" src="brand-system.mjs?v=36"></script></body>
+</html>

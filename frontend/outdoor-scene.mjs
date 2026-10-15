@@ -1,3 +1,4 @@
+import {constructionZone,constructionDevice} from './construction-yard.mjs?v=39';
 import * as THREE from 'three';
 import {placeEntity} from './gis-reference-geometry.mjs';
 
@@ -7,11 +8,13 @@ function worker(){const g=new THREE.Group();box(g,[.7,.8,.4],[0,1.1,0],0xe8ad40)
 
 export class OutdoorActors {
     constructor(parent,onSelect,transform=(e)=>[e.anchor[0],e.anchor[2]]){this.parent=parent;this.onSelect=onSelect;this.transform=transform;this.root=new THREE.Group();parent.add(this.root);this.items=new Map();}
-    update(data,offline,visibility={}){const seen=new Set();for(const e of data?.entities||[]){if(e.view!=='overview'||e.kind==='device'&&!e.mobile)continue;seen.add(e.id);let node=this.items.get(e.id);
-        if(!node){node=e.kind==='person'?worker():e.kind==='zone'?new THREE.Group():new THREE.Group();if(e.kind==='zone'){const m=new THREE.Mesh(new THREE.BoxGeometry(e.size[0],.1,e.size[1]),new THREE.MeshBasicMaterial({color:0xed6e57,transparent:true,opacity:.19,depthWrite:false}));node.add(m);}if(e.kind==='device')box(node,[3.8,1.6,1.7],[0,.9,0],0xd49c3a);node.name=e.id;this.items.set(e.id,node);this.root.add(node);}
-        node.userData.info=e;node.visible=visibility[e.kind]!==false;if(e.kind==='zone'){node.scale.setScalar(this.transform.scale||1);node.rotation.y=-(this.transform.rotation||0);}const p=this.transform(e);node.position.set(p[0],0,p[1]);const level=offline?'unknown':e.riskState||'clear';if(node.userData.ring)node.userData.ring.material.color.setHex(paint[level]||paint.unknown);
+    update(data,offline,visibility={}){const seen=new Set();for(const e of data?.entities||[]){if(e.view!=='overview'||e.kind==='device'&&!e.mobile&&!/起重|吊/.test(e.title))continue;seen.add(e.id);let node=this.items.get(e.id);
+        if(!node){node=e.kind==='person'?worker():e.kind==='zone'?constructionZone(e):constructionDevice(e);node.name=e.id;this.items.set(e.id,node);this.root.add(node);}
+        const structure=node.getObjectByName('lifting-structure');if(structure)structure.visible=!(data?.entities||[]).some(d=>d.kind==='device'&&d.view==='overview'&&/起重|吊/.test(d.title)&&Math.abs(d.anchor[0]-e.center[0])<e.size[0]/2&&Math.abs(d.anchor[2]-e.center[1])<e.size[1]/2);
+        node.userData.info=e;node.visible=visibility[e.kind]!==false;if(['zone','device','person'].includes(e.kind)){node.scale.setScalar(this.transform.scale||1);node.rotation.y=-(this.transform.rotation||0);}const p=this.transform(e);node.position.set(p[0],0,p[1]);const level=offline?'unknown':e.riskState||'clear';if(node.userData.ring)node.userData.ring.material.color.setHex(paint[level]||paint.unknown);
     }for(const [id,node] of this.items)if(!seen.has(id)){this.root.remove(node);this.items.delete(id);}}
     locate(id){return this.items.get(id)?.position;}
+    markerAnchor(id){const object=this.items.get(id);if(!object)return null;object.updateWorldMatrix(true,true);const bounds=new THREE.Box3().setFromObject(object),point=bounds.getCenter(new THREE.Vector3());point.y=bounds.max.y+.15;return point.toArray();}
 }
 
 export const referenceTransform=site=>Object.assign(e=>placeEntity(site,'overview',...(e.kind==='zone'?e.center:[e.anchor[0],e.anchor[2]])),{scale:site.frames.overview.scale,rotation:site.frames.overview.rotation});

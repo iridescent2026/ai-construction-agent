@@ -28,6 +28,17 @@ test('a resolved device is used by the next pronoun-only question',async()=>{
  const h=await harness();await h.ask('B01 status',{answer:'B01',case:caseFor('B-01')});assert.equal(h.get('workflow-entity').value,'B-01');
  await h.ask('its temperature',{answer:'temperature',case:caseFor('B-01')});assert.equal(h.requests.at(-1).entityId,'B-01');
 });
+
+test('free text requests grounded AI and replaces the previous answer while loading',async()=>{
+ const h=await harness();await h.ask('B05状态',{answer:'上一次的状态报告',intent:'status',engine:'aliyun-grounded-chat'});
+ assert.equal(h.requests.at(-1).answerMode,'grounded');assert.match(h.get('workflow-answer-source').textContent,/AI 回答.*设备状态/);
+ let resolve;h.replies.push(new Promise(r=>resolve=r));h.get('workflow-query').value='B05坏了有什么影响';
+ h.get('workflow-ask').listeners.submit({preventDefault(){},submitter:new Element()});
+ assert.match(h.get('workflow-answer').textContent,/正在读取后台依据/);
+ assert.doesNotMatch(h.get('workflow-answer').textContent,/上一次/);
+ resolve({answer:'新的故障影响说明',intent:'impact',engine:'aliyun-grounded-chat'});await flush();
+ assert.equal(h.get('workflow-answer').textContent,'新的故障影响说明');assert.match(h.get('workflow-answer-source').textContent,/AI 回答.*故障影响/);
+});
 test('external results clear old drafts and late external draft responses cannot overwrite a new question',async()=>{
  const h=await harness(),draft={id:'old',entityId:'B-05',reason:'check',case:caseFor('B-05')};
  h.events['workflow-chat-result']({detail:{answer:'draft',case:draft.case,draft}});assert.equal(h.get('workflow-draft').hidden,false);
